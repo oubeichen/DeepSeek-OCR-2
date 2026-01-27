@@ -402,12 +402,21 @@ class TaskManager:
                             window_size=window_size,
                         )
 
-                        # Generate with fair scheduling
+                        # Generate with smart scheduling
                         task.add_log("Running OCR inference...")
-                        request_id = f"{task_id}-page-0"
-                        output_text = await async_generate_single(
-                            input_data, sampling_params, request_id
-                        )
+                        scheduler = await get_smart_scheduler()
+                        await scheduler.register_task(task_id)
+                        try:
+                            await scheduler.wait_for_slot(task_id)
+                            try:
+                                request_id = f"{task_id}-page-0"
+                                output_text = await async_generate_single(
+                                    input_data, sampling_params, request_id
+                                )
+                            finally:
+                                await scheduler.release_slot(task_id)
+                        finally:
+                            await scheduler.unregister_task(task_id)
                         task.processed_pages = 1
 
                         # Clean EOS token before processing
@@ -483,10 +492,8 @@ class TaskManager:
                             await scheduler.wait_for_slot(task_id)
                             try:
                                 request_id = f"{task_id}-page-{idx}"
-                                # use_semaphore=False because SmartScheduler manages concurrency
                                 result = await async_generate_single(
-                                    input_data, sampling_params, request_id,
-                                    use_semaphore=False
+                                    input_data, sampling_params, request_id
                                 )
                                 task.processed_pages += 1
                                 task.add_log(f"Page {idx + 1}/{len(images)} inference complete")

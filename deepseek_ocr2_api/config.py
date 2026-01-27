@@ -228,15 +228,8 @@ class Settings(BaseSettings):
         le=64,
         description="Maximum concurrent inference requests (pages) across all tasks. "
                     "Controls GPU utilization. Smart scheduling dynamically allocates "
-                    "slots based on active task count."
-    )
-    max_pages_per_file: int = Field(
-        default=32,
-        ge=1,
-        le=64,
-        description="Upper limit of concurrent pages per file. Smart scheduling dynamically "
-                    "adjusts actual concurrency: 1 task uses all slots, 2 tasks share equally, etc. "
-                    "This setting caps the maximum any single file can use."
+                    "slots based on active task count: 1 task uses all slots, "
+                    "2 tasks share equally, etc."
     )
 
     # ====================

@@ -27,30 +27,28 @@ _semaphore_lock = asyncio.Lock()
 class SmartScheduler:
     """
     Smart scheduler for dynamic concurrency control.
-    
-    Instead of fixed per-file semaphores, this scheduler dynamically allocates
-    inference slots based on the number of active tasks:
-    
+
+    Dynamically allocates inference slots based on the number of active tasks:
+
     - 1 active task: can use all slots (e.g., 4 slots)
     - 2 active tasks: each can use half (e.g., 2 slots each)
     - 4+ active tasks: each gets at least 1 slot
-    
+
     Key feature: When a new task arrives, existing tasks' quotas are reduced
     dynamically. Already-acquired slots are not forcibly released, but new
     slot acquisitions respect the new quota.
     """
-    
+
     _instance: "SmartScheduler" = None
     _lock = asyncio.Lock()
-    
+
     def __init__(self):
         self._global_semaphore: asyncio.Semaphore = None
         self._task_slots: Dict[str, int] = {}  # task_id -> current slots held
         self._task_lock = asyncio.Lock()
         self._max_concurrency: int = 4
-        self._max_pages_per_file: int = 32  # Upper limit per file
         self._initialized = False
-    
+
     @classmethod
     async def get_instance(cls) -> "SmartScheduler":
         """Get or create the singleton instance."""
@@ -59,39 +57,34 @@ class SmartScheduler:
                 cls._instance = cls()
                 await cls._instance._initialize()
             return cls._instance
-    
+
     async def _initialize(self):
         """Initialize the scheduler with settings."""
         if self._initialized:
             return
         settings = get_settings()
         self._max_concurrency = settings.inference_concurrency
-        self._max_pages_per_file = settings.max_pages_per_file
-        # Use the global inference semaphore to share with single-image tasks
+        # Use the global inference semaphore
         self._global_semaphore = await get_inference_semaphore()
         self._initialized = True
-        logger.info(
-            f"SmartScheduler initialized: max_concurrency={self._max_concurrency}, "
-            f"max_pages_per_file={self._max_pages_per_file}"
-        )
-    
+        logger.info(f"SmartScheduler initialized: max_concurrency={self._max_concurrency}")
+
     def _calculate_task_quota(self, active_task_count: int) -> int:
         """
         Calculate the maximum slots a single task can use.
-        
-        Formula: min(max_pages_per_file, max(1, max_concurrency // active_task_count))
-        
+
+        Formula: max(1, max_concurrency // active_task_count)
+
         Examples (with max_concurrency=4):
-        - 1 task: min(32, max(1, 4//1)) = min(32, 4) = 4
-        - 2 tasks: min(32, max(1, 4//2)) = min(32, 2) = 2
-        - 3 tasks: min(32, max(1, 4//3)) = min(32, 1) = 1
-        - 4 tasks: min(32, max(1, 4//4)) = min(32, 1) = 1
+        - 1 task: max(1, 4//1) = 4
+        - 2 tasks: max(1, 4//2) = 2
+        - 3 tasks: max(1, 4//3) = 1
+        - 4 tasks: max(1, 4//4) = 1
         """
         if active_task_count <= 0:
             active_task_count = 1
-        dynamic_quota = max(1, self._max_concurrency // active_task_count)
-        return min(self._max_pages_per_file, dynamic_quota)
-    
+        return max(1, self._max_concurrency // active_task_count)
+
     async def register_task(self, task_id: str):
         """Register a new task with the scheduler."""
         async with self._task_lock:
@@ -100,7 +93,7 @@ class SmartScheduler:
                 logger.debug(
                     f"Task {task_id} registered. Active tasks: {len(self._task_slots)}"
                 )
-    
+
     async def unregister_task(self, task_id: str):
         """Unregister a task from the scheduler."""
         async with self._task_lock:
@@ -109,22 +102,21 @@ class SmartScheduler:
                 logger.debug(
                     f"Task {task_id} unregistered. Active tasks: {len(self._task_slots)}"
                 )
-    
+
     async def acquire_slot(self, task_id: str) -> bool:
         """
         Try to acquire an inference slot for a task.
-        
+
         Returns True if slot was acquired, False if task has reached its quota.
-        This method will block until a global slot is available.
         """
         async with self._task_lock:
             if task_id not in self._task_slots:
                 self._task_slots[task_id] = 0
-            
+
             active_count = len(self._task_slots)
             quota = self._calculate_task_quota(active_count)
             current_slots = self._task_slots[task_id]
-            
+
             if current_slots >= quota:
                 # Task has reached its dynamic quota, must wait
                 logger.debug(
@@ -132,28 +124,28 @@ class SmartScheduler:
                     f"active_tasks={active_count}"
                 )
                 return False
-            
+
             # Mark that we're about to acquire
             self._task_slots[task_id] = current_slots + 1
-        
+
         # Acquire global semaphore (may block)
         await self._global_semaphore.acquire()
         logger.debug(f"Task {task_id} acquired slot")
         return True
-    
+
     async def release_slot(self, task_id: str):
         """Release an inference slot."""
         async with self._task_lock:
             if task_id in self._task_slots and self._task_slots[task_id] > 0:
                 self._task_slots[task_id] -= 1
-        
+
         self._global_semaphore.release()
         logger.debug(f"Task {task_id} released slot")
-    
+
     async def wait_for_slot(self, task_id: str):
         """
         Wait until a slot is available for this task.
-        
+
         This handles the case where a task has reached its quota and needs
         to wait for either:
         1. One of its own slots to be released
@@ -164,11 +156,11 @@ class SmartScheduler:
                 return
             # Wait a bit before retrying
             await asyncio.sleep(0.05)
-    
+
     def get_active_task_count(self) -> int:
         """Get the number of active tasks."""
         return len(self._task_slots)
-    
+
     def get_task_slots(self, task_id: str) -> int:
         """Get the number of slots currently held by a task."""
         return self._task_slots.get(task_id, 0)
@@ -418,22 +410,16 @@ async def async_generate_single(
     prompt: Dict[str, Any],
     sampling_params: SamplingParams,
     request_id: str,
-    use_semaphore: bool = True,
 ) -> str:
     """
-    Generate output for a single prompt with optional global semaphore for fair scheduling.
+    Generate output for a single prompt.
 
-    This function can acquire a global semaphore before inference, ensuring that:
-    1. Total concurrent inference requests are limited
-    2. Pages from different files are processed fairly (round-robin style)
-    3. Smaller files can complete faster even when larger files are processing
+    Concurrency is managed externally by SmartScheduler.
 
     Args:
         prompt: Prompt dict with multi_modal_data.
         sampling_params: Sampling parameters.
         request_id: Unique request identifier.
-        use_semaphore: Whether to use the global semaphore. Set to False when
-                       using SmartScheduler which manages its own semaphore.
 
     Returns:
         Generated text output.
@@ -456,32 +442,22 @@ async def async_generate_single(
 
     engine = manager.get_engine()
 
-    async def do_inference():
-        logger.debug(f"[{request_id}] Starting inference")
-        try:
-            final_output = ""
-            async for request_output in engine.generate(prompt, sampling_params, request_id):
-                if request_output.outputs:
-                    final_output = request_output.outputs[0].text
+    logger.debug(f"[{request_id}] Starting inference")
+    try:
+        final_output = ""
+        async for request_output in engine.generate(prompt, sampling_params, request_id):
+            if request_output.outputs:
+                final_output = request_output.outputs[0].text
 
-            # Don't clean EOS token here - let caller check completion status first
-            logger.debug(f"[{request_id}] Inference complete")
-            return final_output
-        except Exception as e:
-            # Check if this is a "background loop errored" type error
-            error_msg = str(e).lower()
-            if "loop is not running" in error_msg or "loop has errored" in error_msg:
-                logger.error(f"[{request_id}] vLLM background loop error detected: {e}")
-                manager.mark_errored()
-            raise
-
-    if use_semaphore:
-        semaphore = await get_inference_semaphore()
-        async with semaphore:
-            logger.debug(f"[{request_id}] Acquired semaphore")
-            return await do_inference()
-    else:
-        return await do_inference()
+        logger.debug(f"[{request_id}] Inference complete")
+        return final_output
+    except Exception as e:
+        # Check if this is a "background loop errored" type error
+        error_msg = str(e).lower()
+        if "loop is not running" in error_msg or "loop has errored" in error_msg:
+            logger.error(f"[{request_id}] vLLM background loop error detected: {e}")
+            manager.mark_errored()
+        raise
 
 
 def prepare_image_input(
