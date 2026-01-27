@@ -69,21 +69,60 @@ class SmartScheduler:
         self._initialized = True
         logger.info(f"SmartScheduler initialized: max_concurrency={self._max_concurrency}")
 
-    def _calculate_task_quota(self, active_task_count: int) -> int:
+    async def acquire_slot(self, task_id: str) -> bool:
         """
-        Calculate the maximum slots a single task can use.
+        Try to acquire an inference slot for a task.
 
-        Formula: max(1, max_concurrency // active_task_count)
+        Uses fair distribution: if max_concurrency=100 and active_tasks=51:
+        - base quota = 100 // 51 = 1 (everyone gets at least 1)
+        - remainder = 100 % 51 = 49 (49 tasks can get 1 extra)
+        - Result: 49 tasks get 2 slots, 2 tasks get 1 slot = 100% utilization
 
-        Examples (with max_concurrency=4):
-        - 1 task: max(1, 4//1) = 4
-        - 2 tasks: max(1, 4//2) = 2
-        - 3 tasks: max(1, 4//3) = 1
-        - 4 tasks: max(1, 4//4) = 1
+        Returns True if slot was acquired, False if task has reached its quota.
         """
-        if active_task_count <= 0:
-            active_task_count = 1
-        return max(1, self._max_concurrency // active_task_count)
+        async with self._task_lock:
+            if task_id not in self._task_slots:
+                self._task_slots[task_id] = 0
+
+            active_count = len(self._task_slots)
+            current_slots = self._task_slots[task_id]
+
+            # Calculate fair distribution
+            base_quota = self._max_concurrency // active_count
+            remainder = self._max_concurrency % active_count
+
+            # Check if task can acquire more slots
+            if current_slots < base_quota:
+                # Haven't reached base quota yet, can acquire
+                self._task_slots[task_id] = current_slots + 1
+            elif current_slots == base_quota and remainder > 0:
+                # At base quota, check if extra slots available
+                # Count tasks that already have extra slots (slots > base_quota)
+                tasks_with_extra = sum(
+                    1 for slots in self._task_slots.values() if slots > base_quota
+                )
+                if tasks_with_extra < remainder:
+                    # Extra slot available for this task
+                    self._task_slots[task_id] = current_slots + 1
+                else:
+                    # No extra slots available
+                    logger.debug(
+                        f"Task {task_id} at quota ({current_slots}/{base_quota}+{remainder} extra taken), "
+                        f"active_tasks={active_count}"
+                    )
+                    return False
+            else:
+                # Already at or above max possible quota
+                logger.debug(
+                    f"Task {task_id} at max quota ({current_slots}), "
+                    f"active_tasks={active_count}"
+                )
+                return False
+
+        # Acquire global semaphore (may block)
+        await self._global_semaphore.acquire()
+        logger.debug(f"Task {task_id} acquired slot (now has {self._task_slots.get(task_id, 0)})")
+        return True
 
     async def register_task(self, task_id: str):
         """Register a new task with the scheduler."""
@@ -102,36 +141,6 @@ class SmartScheduler:
                 logger.debug(
                     f"Task {task_id} unregistered. Active tasks: {len(self._task_slots)}"
                 )
-
-    async def acquire_slot(self, task_id: str) -> bool:
-        """
-        Try to acquire an inference slot for a task.
-
-        Returns True if slot was acquired, False if task has reached its quota.
-        """
-        async with self._task_lock:
-            if task_id not in self._task_slots:
-                self._task_slots[task_id] = 0
-
-            active_count = len(self._task_slots)
-            quota = self._calculate_task_quota(active_count)
-            current_slots = self._task_slots[task_id]
-
-            if current_slots >= quota:
-                # Task has reached its dynamic quota, must wait
-                logger.debug(
-                    f"Task {task_id} at quota ({current_slots}/{quota}), "
-                    f"active_tasks={active_count}"
-                )
-                return False
-
-            # Mark that we're about to acquire
-            self._task_slots[task_id] = current_slots + 1
-
-        # Acquire global semaphore (may block)
-        await self._global_semaphore.acquire()
-        logger.debug(f"Task {task_id} acquired slot")
-        return True
 
     async def release_slot(self, task_id: str):
         """Release an inference slot."""
