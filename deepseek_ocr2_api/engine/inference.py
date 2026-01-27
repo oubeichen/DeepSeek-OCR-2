@@ -299,7 +299,7 @@ async def async_generate(
                             yield new_text
             except Exception as e:
                 error_msg = str(e).lower()
-                if "background loop has errored" in error_msg:
+                if "loop is not running" in error_msg or "loop has errored" in error_msg:
                     logger.error(f"[{request_id}] vLLM background loop error detected: {e}")
                     manager.mark_errored()
                 raise
@@ -319,7 +319,7 @@ async def async_generate(
             return final_output
         except Exception as e:
             error_msg = str(e).lower()
-            if "background loop has errored" in error_msg:
+            if "loop is not running" in error_msg or "loop has errored" in error_msg:
                 logger.error(f"[{request_id}] vLLM background loop error detected: {e}")
                 manager.mark_errored()
             raise
@@ -377,7 +377,7 @@ async def async_generate_batch(
             return idx, final_output
         except Exception as e:
             error_msg = str(e).lower()
-            if "background loop has errored" in error_msg:
+            if "loop is not running" in error_msg or "loop has errored" in error_msg:
                 logger.error(f"[{request_id}] vLLM background loop error detected: {e}")
                 manager.mark_errored()
             raise
@@ -470,7 +470,7 @@ async def async_generate_single(
         except Exception as e:
             # Check if this is a "background loop errored" type error
             error_msg = str(e).lower()
-            if "background loop has errored" in error_msg:
+            if "loop is not running" in error_msg or "loop has errored" in error_msg:
                 logger.error(f"[{request_id}] vLLM background loop error detected: {e}")
                 manager.mark_errored()
             raise
