@@ -306,15 +306,16 @@ class TaskManager:
                         # Process single image
                         task.total_pages = 1
                         task.add_log("Loading image...")
-                        image = load_image(task.input_file_path)
+                        image = await asyncio.to_thread(load_image, task.input_file_path)
                         if image is None:
                             raise ValueError("Failed to load image")
                         image = image.convert('RGB')
 
                         task.add_log(f"Image size: {image.size}")
 
-                        # Prepare input
-                        input_data = prepare_image_input(
+                        # Prepare input (run in thread pool to avoid blocking)
+                        input_data = await asyncio.to_thread(
+                            prepare_image_input,
                             image=image,
                             prompt=prompt,
                             crop_mode=crop_mode,
@@ -346,8 +347,9 @@ class TaskManager:
 
                         task.add_log("Processing output...")
 
-                        # Post-process
-                        result = process_output(
+                        # Post-process (run in thread pool to avoid blocking)
+                        result = await asyncio.to_thread(
+                            process_output,
                             text=clean_text,
                             image=image,
                             output_dir=task.output_dir,
@@ -356,8 +358,9 @@ class TaskManager:
                             extract_images=True,
                         )
 
-                        # Package results
-                        zip_path = create_result_package(
+                        # Package results (run in thread pool to avoid blocking)
+                        zip_path = await asyncio.to_thread(
+                            create_result_package,
                             results=[result],
                             output_dir=task.output_dir,
                             package_name=task.task_id,
@@ -367,13 +370,16 @@ class TaskManager:
                     else:
                         # Process PDF with page-level fair scheduling
                         task.add_log("Converting PDF to images...")
-                        images = pdf_to_images(task.input_file_path, dpi=dpi)
+                        images = await asyncio.to_thread(
+                            pdf_to_images, task.input_file_path, dpi=dpi
+                        )
                         task.total_pages = len(images)
                         task.add_log(f"PDF has {len(images)} pages")
 
-                        # Prepare batch inputs
+                        # Prepare batch inputs (run in thread pool to avoid blocking event loop)
                         task.add_log("Preprocessing pages...")
-                        batch_inputs = prepare_batch_inputs(
+                        batch_inputs = await asyncio.to_thread(
+                            prepare_batch_inputs,
                             images=images,
                             prompt=prompt,
                             crop_mode=crop_mode,
@@ -429,23 +435,22 @@ class TaskManager:
 
                         task.add_log("Processing outputs...")
 
-                        # Post-process each page
-                        results = []
-                        annotated_images = []
-
-                        for idx, (output_text, image) in enumerate(zip(outputs, images)):
+                        # Post-process each page (run in thread pool to avoid blocking)
+                        async def process_page_output(idx: int, output_text: str, image) -> tuple:
+                            """Process a single page output in thread pool."""
                             # Check for incomplete output (no EOS token)
                             has_eos = '<｜end▁of▁sentence｜>' in output_text
                             if not has_eos and skip_repeat_pages:
                                 task.add_log(f"Page {idx + 1} appears incomplete, skipping")
-                                continue
+                                return idx, None
 
                             # Clean EOS token before processing
                             clean_text = output_text.replace('<｜end▁of▁sentence｜>', '')
 
                             task.add_log(f"Processing page {idx + 1}/{len(images)}")
 
-                            result = process_output(
+                            result = await asyncio.to_thread(
+                                process_output,
                                 text=clean_text,
                                 image=image,
                                 output_dir=task.output_dir,
@@ -453,20 +458,34 @@ class TaskManager:
                                 save_annotated=True,
                                 extract_images=True,
                             )
-                            results.append(result)
+                            return idx, result
 
-                            if result.get("annotated_image_path"):
-                                annotated_images.append(Image.open(result["annotated_image_path"]))
+                        # Process all pages concurrently
+                        process_tasks = [
+                            process_page_output(idx, output_text, image)
+                            for idx, (output_text, image) in enumerate(zip(outputs, images))
+                        ]
+                        processed_results = await asyncio.gather(*process_tasks)
 
-                        # Generate annotated PDF
+                        # Collect results in order
+                        results = []
+                        annotated_images = []
+                        for idx, result in sorted(processed_results, key=lambda x: x[0]):
+                            if result is not None:
+                                results.append(result)
+                                if result.get("annotated_image_path"):
+                                    annotated_images.append(Image.open(result["annotated_image_path"]))
+
+                        # Generate annotated PDF (run in thread pool to avoid blocking)
                         annotated_pdf_path = None
                         if annotated_images:
                             annotated_pdf_path = os.path.join(task.output_dir, "annotated.pdf")
-                            images_to_pdf(annotated_images, annotated_pdf_path)
+                            await asyncio.to_thread(images_to_pdf, annotated_images, annotated_pdf_path)
 
-                        # Package results
+                        # Package results (run in thread pool to avoid blocking)
                         original_name = os.path.splitext(task.filename)[0]
-                        zip_path = create_pdf_result_package(
+                        zip_path = await asyncio.to_thread(
+                            create_pdf_result_package,
                             results=results,
                             output_dir=task.output_dir,
                             annotated_pdf_path=annotated_pdf_path,
