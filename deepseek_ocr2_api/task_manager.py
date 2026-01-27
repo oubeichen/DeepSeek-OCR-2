@@ -150,6 +150,7 @@ class TaskManager:
         self._storage_dir.mkdir(parents=True, exist_ok=True)
         self._persistence_enabled = settings.task_persistence
         self._retention_days = settings.task_retention_days
+        self._retention_count = settings.task_retention_count
         self._last_cleanup_check: Optional[datetime] = None
 
         # Load persisted tasks on startup
@@ -634,25 +635,48 @@ class TaskManager:
 
     def _cleanup_old_tasks_sync(self) -> int:
         """
-        Synchronously remove tasks older than retention_days (internal use).
+        Synchronously remove old tasks based on retention settings (internal use).
+
+        Cleanup rules:
+        - Remove tasks older than retention_days (if > 0)
+        - Keep at most retention_count tasks (if > 0), preserving the most recent ones
 
         Returns:
             Number of tasks deleted.
         """
-        if self._retention_days <= 0:
-            return 0
-
-        cutoff = datetime.now() - timedelta(days=self._retention_days)
-        cutoff_str = cutoff.isoformat()
-
         tasks_to_delete = []
-        for task_id, task in list(self.tasks.items()):
-            # Only cleanup completed or failed tasks
-            if task.status not in (TaskStatus.COMPLETED, TaskStatus.FAILED):
-                continue
-            # Check if task is older than retention period
-            if task.created_at < cutoff_str:
-                tasks_to_delete.append(task_id)
+
+        # Get all completed/failed tasks sorted by creation time (oldest first)
+        cleanable_tasks = [
+            (task_id, task) for task_id, task in self.tasks.items()
+            if task.status in (TaskStatus.COMPLETED, TaskStatus.FAILED)
+        ]
+        cleanable_tasks.sort(key=lambda x: x[1].created_at)
+
+        # Rule 1: Remove tasks older than retention_days
+        if self._retention_days > 0:
+            cutoff = datetime.now() - timedelta(days=self._retention_days)
+            cutoff_str = cutoff.isoformat()
+            for task_id, task in cleanable_tasks:
+                if task.created_at < cutoff_str:
+                    tasks_to_delete.append(task_id)
+
+        # Rule 2: Keep at most retention_count tasks
+        if self._retention_count > 0:
+            # Count all tasks (including pending/processing)
+            total_tasks = len(self.tasks)
+            if total_tasks > self._retention_count:
+                # Need to delete oldest cleanable tasks to get under limit
+                excess = total_tasks - self._retention_count
+                for task_id, task in cleanable_tasks:
+                    if task_id not in tasks_to_delete:
+                        tasks_to_delete.append(task_id)
+                        excess -= 1
+                        if excess <= 0:
+                            break
+
+        # Remove duplicates while preserving order
+        tasks_to_delete = list(dict.fromkeys(tasks_to_delete))
 
         deleted_count = 0
         for task_id in tasks_to_delete:
@@ -673,7 +697,12 @@ class TaskManager:
             deleted_count += 1
 
         if deleted_count > 0:
-            logger.info(f"Cleaned up {deleted_count} old tasks (retention: {self._retention_days} days)")
+            reasons = []
+            if self._retention_days > 0:
+                reasons.append(f"retention: {self._retention_days} days")
+            if self._retention_count > 0:
+                reasons.append(f"max: {self._retention_count} tasks")
+            logger.info(f"Cleaned up {deleted_count} old tasks ({', '.join(reasons)})")
             # Save updated task list
             self._save_tasks_sync()
 

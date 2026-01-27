@@ -251,8 +251,14 @@ class Settings(BaseSettings):
     task_retention_days: int = Field(
         default=7,
         ge=0,
-        description="Days to keep completed tasks (0 = keep forever). "
+        description="Days to keep completed tasks (0 = no time limit). "
                     "Cleanup runs on new file upload."
+    )
+    task_retention_count: int = Field(
+        default=100,
+        ge=0,
+        description="Maximum number of tasks to keep (0 = no limit). "
+                    "Keeps the most recent tasks when limit is exceeded."
     )
 
     # ==================
