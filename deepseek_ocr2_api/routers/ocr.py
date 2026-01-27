@@ -89,15 +89,15 @@ Process a single image and extract text content as markdown.
 async def ocr_image(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="Image file to process"),
-    prompt: Optional[str] = Form(None, description="Custom prompt"),
-    temperature: Optional[float] = Form(None, description="Sampling temperature"),
-    max_tokens: Optional[int] = Form(None, description="Maximum tokens"),
-    ngram_size: Optional[int] = Form(None, description="N-gram size"),
-    window_size: Optional[int] = Form(None, description="Window size"),
-    crop_mode: Optional[bool] = Form(None, description="Enable dynamic cropping"),
-    return_raw_output: bool = Form(False, description="Include raw output"),
-    return_annotated_image: bool = Form(True, description="Include annotated image"),
-    extract_images: bool = Form(True, description="Extract image regions"),
+    prompt: Optional[str] = Form(default=None, description="Custom prompt (leave empty to use default)", examples=[""]),
+    temperature: Optional[float] = Form(default=None, description="Sampling temperature", examples=[None]),
+    max_tokens: Optional[int] = Form(default=None, description="Maximum tokens", examples=[None]),
+    ngram_size: Optional[int] = Form(default=None, description="N-gram size", examples=[None]),
+    window_size: Optional[int] = Form(default=None, description="Window size", examples=[None]),
+    crop_mode: Optional[bool] = Form(default=None, description="Enable dynamic cropping", examples=[None]),
+    return_raw_output: bool = Form(default=False, description="Include raw output"),
+    return_annotated_image: bool = Form(default=True, description="Include annotated image"),
+    extract_images: bool = Form(default=True, description="Extract image regions"),
 ):
     """
     Process a single image for OCR.
@@ -137,7 +137,7 @@ async def ocr_image(
         logger.info(f"[{request_id}] Image size: {image.size}")
 
         # Prepare prompt
-        actual_prompt = prompt or settings.default_prompt
+        actual_prompt = prompt if prompt else settings.default_prompt
 
         # Prepare input
         _crop_mode = crop_mode if crop_mode is not None else settings.crop_mode
@@ -232,18 +232,18 @@ Process a PDF document and extract text content as markdown.
 async def ocr_pdf(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(..., description="PDF file to process"),
-    prompt: Optional[str] = Form(None, description="Custom prompt"),
-    temperature: Optional[float] = Form(None, description="Sampling temperature"),
-    max_tokens: Optional[int] = Form(None, description="Maximum tokens"),
-    ngram_size: Optional[int] = Form(None, description="N-gram size"),
-    window_size: Optional[int] = Form(None, description="Window size"),
-    crop_mode: Optional[bool] = Form(None, description="Enable dynamic cropping"),
-    dpi: Optional[int] = Form(None, description="PDF conversion DPI"),
-    page_separator: Optional[str] = Form(None, description="Page separator"),
-    skip_repeat_pages: Optional[bool] = Form(None, description="Skip repeated pages"),
-    generate_annotated_pdf: bool = Form(True, description="Generate annotated PDF"),
-    return_raw_output: bool = Form(False, description="Include raw output"),
-    extract_images: bool = Form(True, description="Extract image regions"),
+    prompt: Optional[str] = Form(default=None, description="Custom prompt (leave empty to use default)", examples=[""]),
+    temperature: Optional[float] = Form(default=None, description="Sampling temperature", examples=[None]),
+    max_tokens: Optional[int] = Form(default=None, description="Maximum tokens", examples=[None]),
+    ngram_size: Optional[int] = Form(default=None, description="N-gram size", examples=[None]),
+    window_size: Optional[int] = Form(default=None, description="Window size", examples=[None]),
+    crop_mode: Optional[bool] = Form(default=None, description="Enable dynamic cropping", examples=[None]),
+    dpi: Optional[int] = Form(default=None, description="PDF conversion DPI", examples=[None]),
+    page_separator: Optional[str] = Form(default=None, description="Page separator (leave empty to use default)", examples=[""]),
+    skip_repeat_pages: Optional[bool] = Form(default=None, description="Skip repeated pages", examples=[None]),
+    generate_annotated_pdf: bool = Form(default=True, description="Generate annotated PDF"),
+    return_raw_output: bool = Form(default=False, description="Include raw output"),
+    extract_images: bool = Form(default=True, description="Extract image regions"),
 ):
     """
     Process a PDF document for OCR.
@@ -280,7 +280,7 @@ async def ocr_pdf(
         logger.info(f"[{request_id}] PDF has {len(images)} pages")
 
         # Prepare prompt
-        actual_prompt = prompt or settings.default_prompt
+        actual_prompt = prompt if prompt else settings.default_prompt
 
         # Prepare batch inputs
         _crop_mode = crop_mode if crop_mode is not None else settings.crop_mode
@@ -345,7 +345,7 @@ async def ocr_pdf(
 
         # Package results
         original_name = os.path.splitext(file.filename)[0]
-        _page_sep = page_separator or settings.page_separator
+        _page_sep = page_separator if page_separator else settings.page_separator
 
         zip_path = create_pdf_result_package(
             results=results,
@@ -404,16 +404,16 @@ Process multiple images in a single request.
 async def ocr_batch(
     background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(..., description="Image files to process"),
-    prompt: Optional[str] = Form(None, description="Custom prompt"),
-    temperature: Optional[float] = Form(None, description="Sampling temperature"),
-    max_tokens: Optional[int] = Form(None, description="Maximum tokens"),
-    ngram_size: Optional[int] = Form(None, description="N-gram size"),
-    window_size: Optional[int] = Form(None, description="Window size"),
-    crop_mode: Optional[bool] = Form(None, description="Enable dynamic cropping"),
-    num_workers: Optional[int] = Form(None, description="Number of preprocessing workers"),
-    return_raw_output: bool = Form(False, description="Include raw output"),
-    return_annotated_image: bool = Form(True, description="Include annotated images"),
-    extract_images: bool = Form(True, description="Extract image regions"),
+    prompt: Optional[str] = Form(default=None, description="Custom prompt (leave empty to use default)", examples=[""]),
+    temperature: Optional[float] = Form(default=None, description="Sampling temperature", examples=[None]),
+    max_tokens: Optional[int] = Form(default=None, description="Maximum tokens", examples=[None]),
+    ngram_size: Optional[int] = Form(default=None, description="N-gram size", examples=[None]),
+    window_size: Optional[int] = Form(default=None, description="Window size", examples=[None]),
+    crop_mode: Optional[bool] = Form(default=None, description="Enable dynamic cropping", examples=[None]),
+    num_workers: Optional[int] = Form(default=None, description="Number of preprocessing workers", examples=[None]),
+    return_raw_output: bool = Form(default=False, description="Include raw output"),
+    return_annotated_image: bool = Form(default=True, description="Include annotated images"),
+    extract_images: bool = Form(default=True, description="Extract image regions"),
 ):
     """
     Process multiple images for OCR in batch.
@@ -457,7 +457,7 @@ async def ocr_batch(
             images.append(image.convert('RGB'))
 
         # Prepare prompt
-        actual_prompt = prompt or settings.default_prompt
+        actual_prompt = prompt if prompt else settings.default_prompt
 
         # Prepare batch inputs
         _crop_mode = crop_mode if crop_mode is not None else settings.crop_mode
@@ -548,13 +548,13 @@ Useful for programmatic access when you don't need the packaged files.
 )
 async def ocr_image_json(
     file: UploadFile = File(..., description="Image file to process"),
-    prompt: Optional[str] = Form(None, description="Custom prompt"),
-    temperature: Optional[float] = Form(None, description="Sampling temperature"),
-    max_tokens: Optional[int] = Form(None, description="Maximum tokens"),
-    ngram_size: Optional[int] = Form(None, description="N-gram size"),
-    window_size: Optional[int] = Form(None, description="Window size"),
-    crop_mode: Optional[bool] = Form(None, description="Enable dynamic cropping"),
-    return_raw_output: bool = Form(False, description="Include raw output"),
+    prompt: Optional[str] = Form(default=None, description="Custom prompt (leave empty to use default)", examples=[""]),
+    temperature: Optional[float] = Form(default=None, description="Sampling temperature", examples=[None]),
+    max_tokens: Optional[int] = Form(default=None, description="Maximum tokens", examples=[None]),
+    ngram_size: Optional[int] = Form(default=None, description="N-gram size", examples=[None]),
+    window_size: Optional[int] = Form(default=None, description="Window size", examples=[None]),
+    crop_mode: Optional[bool] = Form(default=None, description="Enable dynamic cropping", examples=[None]),
+    return_raw_output: bool = Form(default=False, description="Include raw output"),
 ) -> OCRResponse:
     """
     Process a single image and return JSON response.
@@ -588,7 +588,7 @@ async def ocr_image_json(
         image = image.convert('RGB')
 
         # Prepare prompt
-        actual_prompt = prompt or settings.default_prompt
+        actual_prompt = prompt if prompt else settings.default_prompt
 
         # Prepare input
         _crop_mode = crop_mode if crop_mode is not None else settings.crop_mode

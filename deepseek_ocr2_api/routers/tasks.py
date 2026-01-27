@@ -127,22 +127,22 @@ async def get_config():
 async def upload_file(
     file: UploadFile = File(..., description="File to process"),
     # Prompt
-    prompt: Optional[str] = Form(None, description="Custom prompt"),
+    prompt: Optional[str] = Form(default=None, description="Custom prompt (leave empty to use default)", examples=[""]),
     # Sampling parameters
-    temperature: Optional[float] = Form(None, description="Sampling temperature (0.0-2.0)"),
-    max_tokens: Optional[int] = Form(None, description="Maximum tokens to generate"),
-    ngram_size: Optional[int] = Form(None, description="N-gram size for repetition penalty"),
-    window_size: Optional[int] = Form(None, description="Window size for N-gram check"),
+    temperature: Optional[float] = Form(default=None, description="Sampling temperature (0.0-2.0)", examples=[None]),
+    max_tokens: Optional[int] = Form(default=None, description="Maximum tokens to generate", examples=[None]),
+    ngram_size: Optional[int] = Form(default=None, description="N-gram size for repetition penalty", examples=[None]),
+    window_size: Optional[int] = Form(default=None, description="Window size for N-gram check", examples=[None]),
     # Image processing parameters
-    crop_mode: Optional[bool] = Form(None, description="Enable dynamic cropping"),
-    min_crops: Optional[int] = Form(None, description="Minimum number of crops"),
-    max_crops: Optional[int] = Form(None, description="Maximum number of crops"),
-    image_size: Optional[int] = Form(None, description="Local view image size"),
-    base_size: Optional[int] = Form(None, description="Global view base size"),
+    crop_mode: Optional[bool] = Form(default=None, description="Enable dynamic cropping", examples=[None]),
+    min_crops: Optional[int] = Form(default=None, description="Minimum number of crops", examples=[None]),
+    max_crops: Optional[int] = Form(default=None, description="Maximum number of crops", examples=[None]),
+    image_size: Optional[int] = Form(default=None, description="Local view image size", examples=[None]),
+    base_size: Optional[int] = Form(default=None, description="Global view base size", examples=[None]),
     # PDF processing parameters
-    dpi: Optional[int] = Form(None, description="PDF conversion DPI"),
-    page_separator: Optional[str] = Form(None, description="Page separator in output"),
-    skip_repeat_pages: Optional[bool] = Form(None, description="Skip repeated/incomplete pages"),
+    dpi: Optional[int] = Form(default=None, description="PDF conversion DPI", examples=[None]),
+    page_separator: Optional[str] = Form(default=None, description="Page separator in output (leave empty to use default)", examples=[""]),
+    skip_repeat_pages: Optional[bool] = Form(default=None, description="Skip repeated/incomplete pages", examples=[None]),
 ):
     """
     Upload a file and create an OCR task.
@@ -185,8 +185,8 @@ async def upload_file(
     settings = get_settings()
     ocr_params = {}
 
-    # Prompt
-    ocr_params["prompt"] = prompt if prompt is not None else settings.default_prompt
+    # Prompt (treat empty string as None)
+    ocr_params["prompt"] = prompt if prompt else settings.default_prompt
 
     # Sampling parameters
     if temperature is not None:
@@ -211,7 +211,8 @@ async def upload_file(
 
     # PDF processing parameters
     ocr_params["dpi"] = dpi if dpi is not None else settings.pdf_dpi
-    if page_separator is not None:
+    # Treat empty string as None for page_separator
+    if page_separator:
         ocr_params["page_separator"] = page_separator
     if skip_repeat_pages is not None:
         ocr_params["skip_repeat_pages"] = skip_repeat_pages
