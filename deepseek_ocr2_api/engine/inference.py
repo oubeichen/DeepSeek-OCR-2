@@ -73,64 +73,6 @@ def create_sampling_params(
     )
 
 
-def sync_generate(
-    prompts: Union[str, List[Dict[str, Any]]],
-    sampling_params: Optional[SamplingParams] = None,
-    settings: Optional[Settings] = None,
-) -> List[str]:
-    """
-    Synchronous generation using LLM engine.
-
-    Args:
-        prompts: Single prompt string or list of prompt dicts with multi_modal_data.
-        sampling_params: Sampling parameters. If None, creates default.
-        settings: Settings for creating sampling params.
-
-    Returns:
-        List of generated text outputs.
-    """
-    manager = EngineManager.get_instance()
-
-    if not manager.is_initialized():
-        raise RuntimeError("Engine not initialized. Call initialize() first.")
-
-    if manager.get_mode() != "sync":
-        raise RuntimeError("Engine is in async mode. Use async_generate() instead.")
-
-    engine = manager.get_engine()
-
-    if sampling_params is None:
-        sampling_params = create_sampling_params(settings)
-
-    # Ensure prompts is a list
-    if isinstance(prompts, str):
-        prompts = [{"prompt": prompts}]
-    elif isinstance(prompts, dict):
-        prompts = [prompts]
-
-    logger.info(f"Starting sync generation for {len(prompts)} prompt(s)...")
-    start_time = time.time()
-
-    outputs = engine.generate(prompts, sampling_params=sampling_params)
-
-    elapsed = time.time() - start_time
-    logger.info(f"Generation complete in {elapsed:.2f}s")
-
-    # Extract text from outputs
-    results = []
-    for output in outputs:
-        if output.outputs:
-            text = output.outputs[0].text
-            # Clean up end of sentence token if present
-            if '<｜end▁of▁sentence｜>' in text:
-                text = text.replace('<｜end▁of▁sentence｜>', '')
-            results.append(text)
-        else:
-            results.append("")
-
-    return results
-
-
 async def async_generate(
     prompt: Union[str, Dict[str, Any]],
     sampling_params: Optional[SamplingParams] = None,
@@ -154,8 +96,7 @@ async def async_generate(
     if not manager.is_initialized():
         raise RuntimeError("Engine not initialized. Call initialize() first.")
 
-    if manager.get_mode() != "async":
-        raise RuntimeError("Engine is in sync mode. Use sync_generate() instead.")
+
 
     engine = manager.get_engine()
 
@@ -195,6 +136,62 @@ async def async_generate(
             final_output = final_output.replace('<｜end▁of▁sentence｜>', '')
 
         return final_output
+
+
+async def async_generate_batch(
+    prompts: List[Dict[str, Any]],
+    sampling_params: Optional[SamplingParams] = None,
+    settings: Optional[Settings] = None,
+) -> List[str]:
+    """
+    Batch asynchronous generation using AsyncLLMEngine.
+
+    Args:
+        prompts: List of prompt dicts with multi_modal_data.
+        sampling_params: Sampling parameters. If None, creates default.
+        settings: Settings for creating sampling params.
+
+    Returns:
+        List of generated text outputs.
+    """
+    import asyncio
+
+    manager = EngineManager.get_instance()
+
+    if not manager.is_initialized():
+        raise RuntimeError("Engine not initialized. Call initialize() first.")
+
+    engine = manager.get_engine()
+
+    if sampling_params is None:
+        sampling_params = create_sampling_params(settings)
+
+    logger.info(f"Starting async batch generation for {len(prompts)} prompt(s)...")
+    start_time = time.time()
+
+    async def generate_single(prompt: Dict[str, Any], idx: int) -> tuple:
+        request_id = f"request-{int(time.time() * 1000)}-{idx}"
+        final_output = ""
+        async for request_output in engine.generate(prompt, sampling_params, request_id):
+            if request_output.outputs:
+                final_output = request_output.outputs[0].text
+        # Clean up end of sentence token
+        if '<｜end▁of▁sentence｜>' in final_output:
+            final_output = final_output.replace('<｜end▁of▁sentence｜>', '')
+        return idx, final_output
+
+    # Run all generations concurrently
+    tasks = [generate_single(prompt, idx) for idx, prompt in enumerate(prompts)]
+    results_with_idx = await asyncio.gather(*tasks)
+
+    # Sort by index to maintain order
+    results_with_idx.sort(key=lambda x: x[0])
+    results = [r[1] for r in results_with_idx]
+
+    elapsed = time.time() - start_time
+    logger.info(f"Batch generation complete in {elapsed:.2f}s")
+
+    return results
 
 
 def prepare_image_input(

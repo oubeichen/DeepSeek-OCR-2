@@ -200,7 +200,7 @@ class TaskManager:
 
     async def _process_queue(self):
         """Background worker to process tasks."""
-        from .engine import EngineManager, sync_generate, prepare_image_input, prepare_batch_inputs, create_sampling_params
+        from .engine import EngineManager, async_generate_batch, prepare_image_input, prepare_batch_inputs, create_sampling_params
         from .config import get_settings
         from .processors.image import load_image
         from .processors.pdf import pdf_to_images, images_to_pdf
@@ -288,7 +288,7 @@ class TaskManager:
 
                         # Generate
                         task.add_log("Running OCR inference...")
-                        outputs = sync_generate([input_data], sampling_params, settings)
+                        outputs = await async_generate_batch([input_data], sampling_params, settings)
                         output_text = outputs[0] if outputs else ""
 
                         task.add_log("Processing output...")
@@ -343,7 +343,7 @@ class TaskManager:
 
                         # Generate
                         task.add_log("Running OCR inference...")
-                        outputs = sync_generate(batch_inputs, sampling_params, settings)
+                        outputs = await async_generate_batch(batch_inputs, sampling_params, settings)
 
                         task.add_log("Processing outputs...")
 

@@ -105,16 +105,6 @@ def parse_args():
         help="Enforce eager mode (disable CUDA graphs)",
     )
 
-    # Engine mode
-    engine_group = parser.add_argument_group("Engine Settings")
-    engine_group.add_argument(
-        "--engine-mode",
-        type=str,
-        default=os.getenv("DEEPSEEK_OCR2_ENGINE_MODE", "sync"),
-        choices=["sync", "async"],
-        help="Engine mode: sync for LLM, async for AsyncLLMEngine",
-    )
-
     # Image processing settings
     image_group = parser.add_argument_group("Image Processing Settings")
     image_group.add_argument(
@@ -212,7 +202,6 @@ def main():
         "DEEPSEEK_OCR2_BLOCK_SIZE": str(args.block_size),
         "DEEPSEEK_OCR2_MAX_NUM_SEQS": str(args.max_num_seqs),
         "DEEPSEEK_OCR2_ENFORCE_EAGER": str(args.enforce_eager).lower(),
-        "DEEPSEEK_OCR2_ENGINE_MODE": args.engine_mode,
         "DEEPSEEK_OCR2_IMAGE_SIZE": str(args.image_size),
         "DEEPSEEK_OCR2_BASE_SIZE": str(args.base_size),
         "DEEPSEEK_OCR2_MIN_CROPS": str(args.min_crops),
@@ -242,7 +231,6 @@ def main():
 ║  Host:      {args.host:<47} ║
 ║  Port:      {args.port:<47} ║
 ║  GPU Mem:   {args.gpu_memory_utilization:<47} ║
-║  Mode:      {args.engine_mode:<47} ║
 ╠══════════════════════════════════════════════════════════════╣
 ║  Docs:      http://{args.host}:{args.port}/docs{' ' * (36 - len(str(args.port)))} ║
 ║  ReDoc:     http://{args.host}:{args.port}/redoc{' ' * (35 - len(str(args.port)))} ║

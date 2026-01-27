@@ -49,8 +49,8 @@ async def lifespan(app: FastAPI):
     # Initialize engine
     try:
         manager = EngineManager.get_instance()
-        logger.info(f"Initializing engine in {settings.engine_mode} mode...")
-        manager.initialize(settings, mode=settings.engine_mode)
+        logger.info("Initializing async engine...")
+        manager.initialize(settings)
         logger.info("Engine initialized successfully!")
     except Exception as e:
         logger.error(f"Failed to initialize engine: {e}")

@@ -62,7 +62,7 @@ async def get_config() -> ConfigResponse:
         gpu_memory_utilization=settings.gpu_memory_utilization,
         tensor_parallel_size=settings.tensor_parallel_size,
         max_model_len=settings.max_model_len,
-        engine_mode=settings.engine_mode,
+        engine_mode="async",
         image_size=settings.image_size,
         base_size=settings.base_size,
         min_crops=settings.min_crops,
@@ -125,7 +125,7 @@ async def initialize_engine() -> EngineStatusResponse:
     settings = get_settings()
 
     try:
-        manager.initialize(settings, mode=settings.engine_mode)
+        manager.initialize(settings)
     except Exception as e:
         logger.error(f"Failed to initialize engine: {e}")
         raise HTTPException(

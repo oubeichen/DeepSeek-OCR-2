@@ -2,8 +2,8 @@
 
 from .manager import EngineManager
 from .inference import (
-    sync_generate,
     async_generate,
+    async_generate_batch,
     create_sampling_params,
     prepare_image_input,
     prepare_batch_inputs,
@@ -11,8 +11,8 @@ from .inference import (
 
 __all__ = [
     "EngineManager",
-    "sync_generate",
     "async_generate",
+    "async_generate_batch",
     "create_sampling_params",
     "prepare_image_input",
     "prepare_batch_inputs",

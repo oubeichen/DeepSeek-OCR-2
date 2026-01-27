@@ -207,14 +207,6 @@ class Settings(BaseSettings):
         description="Enable auto-reload for development"
     )
 
-    # ============
-    # Engine Mode
-    # ============
-    engine_mode: Literal["sync", "async"] = Field(
-        default="sync",
-        description="Engine mode: 'sync' for LLM, 'async' for AsyncLLMEngine"
-    )
-
     # =================
     # Output Settings
     # =================

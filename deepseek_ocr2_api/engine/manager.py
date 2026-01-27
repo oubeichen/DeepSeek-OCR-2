@@ -31,7 +31,7 @@ class EngineManager:
 
     Usage:
         manager = EngineManager.get_instance()
-        manager.initialize(settings, mode="sync")
+        manager.initialize(settings)
         engine = manager.get_engine()
     """
 
@@ -70,14 +70,12 @@ class EngineManager:
     def initialize(
         self,
         settings: Optional[Settings] = None,
-        mode: Literal["sync", "async"] = "sync"
     ) -> None:
         """
-        Initialize the vLLM engine.
+        Initialize the vLLM async engine.
 
         Args:
             settings: Configuration settings. If None, uses global settings.
-            mode: Engine mode - "sync" for LLM, "async" for AsyncLLMEngine.
 
         Raises:
             RuntimeError: If engine is already initialized with different settings.
@@ -89,12 +87,12 @@ class EngineManager:
 
             settings = settings or get_settings()
             self._settings = settings
-            self._mode = mode
+            self._mode = "async"
 
             # Apply environment variables
             settings.apply_env_vars()
 
-            logger.info(f"Initializing engine in {mode} mode...")
+            logger.info("Initializing async engine...")
             logger.info(f"Model path: {settings.model_path}")
             logger.info(f"GPU memory utilization: {settings.gpu_memory_utilization}")
             logger.info(f"Tensor parallel size: {settings.tensor_parallel_size}")
@@ -102,11 +100,8 @@ class EngineManager:
             # Register the custom model
             self._register_model()
 
-            # Initialize the engine based on mode
-            if mode == "sync":
-                self._init_sync_engine(settings)
-            else:
-                self._init_async_engine(settings)
+            # Initialize the async engine
+            self._init_async_engine(settings)
 
             # Initialize the processor
             self._init_processor(settings)
@@ -121,26 +116,6 @@ class EngineManager:
 
         ModelRegistry.register_model("DeepseekOCR2ForCausalLM", DeepseekOCR2ForCausalLM)
         logger.info("Registered DeepseekOCR2ForCausalLM model.")
-
-    def _init_sync_engine(self, settings: Settings) -> None:
-        """Initialize synchronous LLM engine."""
-        from vllm import LLM
-
-        self._engine = LLM(
-            model=settings.model_path,
-            hf_overrides={"architectures": ["DeepseekOCR2ForCausalLM"]},
-            dtype=settings.dtype,
-            block_size=settings.block_size,
-            enforce_eager=settings.enforce_eager,
-            trust_remote_code=settings.trust_remote_code,
-            max_model_len=settings.max_model_len,
-            swap_space=settings.swap_space,
-            max_num_seqs=settings.max_num_seqs,
-            tensor_parallel_size=settings.tensor_parallel_size,
-            gpu_memory_utilization=settings.gpu_memory_utilization,
-            disable_mm_preprocessor_cache=settings.disable_mm_preprocessor_cache,
-        )
-        logger.info("Synchronous LLM engine initialized.")
 
     def _init_async_engine(self, settings: Settings) -> None:
         """Initialize asynchronous LLM engine."""

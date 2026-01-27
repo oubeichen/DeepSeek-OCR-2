@@ -125,7 +125,7 @@ class HealthResponse(BaseModel):
                 "version": "1.0.0",
                 "timestamp": "2024-01-15T10:30:00Z",
                 "engine_initialized": True,
-                "engine_mode": "sync"
+                "engine_mode": "async"
             }
         }
 
@@ -168,7 +168,7 @@ class ConfigResponse(BaseModel):
                 "gpu_memory_utilization": 0.8,
                 "tensor_parallel_size": 1,
                 "max_model_len": 8192,
-                "engine_mode": "sync",
+                "engine_mode": "async",
                 "image_size": 768,
                 "base_size": 1024,
                 "min_crops": 2,

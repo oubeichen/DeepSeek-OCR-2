@@ -17,7 +17,7 @@ from PIL import Image as PILImage
 from ..config import get_settings
 from ..engine.manager import EngineManager
 from ..engine.inference import (
-    sync_generate,
+    async_generate_batch,
     create_sampling_params,
     prepare_image_input,
     prepare_batch_inputs,
@@ -154,7 +154,7 @@ async def ocr_image(
 
         # Generate
         logger.info(f"[{request_id}] Starting inference...")
-        outputs = sync_generate([input_data], sampling_params, settings)
+        outputs = await async_generate_batch([input_data], sampling_params, settings)
         output_text = outputs[0] if outputs else ""
 
         logger.info(f"[{request_id}] Inference complete, processing output...")
@@ -303,7 +303,7 @@ async def ocr_pdf(
 
         # Generate
         logger.info(f"[{request_id}] Starting batch inference...")
-        outputs = sync_generate(batch_inputs, sampling_params, settings)
+        outputs = await async_generate_batch(batch_inputs, sampling_params, settings)
 
         logger.info(f"[{request_id}] Inference complete, processing outputs...")
 
@@ -480,7 +480,7 @@ async def ocr_batch(
 
         # Generate
         logger.info(f"[{request_id}] Starting batch inference for {len(images)} images...")
-        outputs = sync_generate(batch_inputs, sampling_params, settings)
+        outputs = await async_generate_batch(batch_inputs, sampling_params, settings)
 
         logger.info(f"[{request_id}] Inference complete, processing outputs...")
 
@@ -601,7 +601,7 @@ async def ocr_image_json(
         )
 
         # Generate
-        outputs = sync_generate([input_data], sampling_params, settings)
+        outputs = await async_generate_batch([input_data], sampling_params, settings)
         output_text = outputs[0] if outputs else ""
 
         # Simple post-processing (no file saving)
