@@ -201,6 +201,10 @@ def prepare_image_input(
     image,
     prompt: str,
     crop_mode: bool = True,
+    image_size: Optional[int] = None,
+    base_size: Optional[int] = None,
+    min_crops: Optional[int] = None,
+    max_crops: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Prepare image input for inference.
@@ -209,6 +213,10 @@ def prepare_image_input(
         image: PIL Image object.
         prompt: Text prompt.
         crop_mode: Whether to use dynamic cropping.
+        image_size: Local view image size (overrides settings).
+        base_size: Global view base size (overrides settings).
+        min_crops: Minimum number of crops (overrides settings).
+        max_crops: Maximum number of crops (overrides settings).
 
     Returns:
         Dict with prompt and multi_modal_data ready for inference.
@@ -216,12 +224,17 @@ def prepare_image_input(
     manager = EngineManager.get_instance()
     processor = manager.get_processor()
 
-    # Tokenize image
+    # Tokenize image with dynamic parameters
     image_features = processor.tokenize_with_images(
         images=[image],
         bos=True,
         eos=True,
-        cropping=crop_mode
+        cropping=crop_mode,
+        prompt=prompt,
+        image_size=image_size,
+        base_size=base_size,
+        min_crops=min_crops,
+        max_crops=max_crops,
     )
 
     return {
@@ -235,6 +248,10 @@ def prepare_batch_inputs(
     prompt: str,
     crop_mode: bool = True,
     num_workers: int = 64,
+    image_size: Optional[int] = None,
+    base_size: Optional[int] = None,
+    min_crops: Optional[int] = None,
+    max_crops: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     """
     Prepare batch image inputs for inference using thread pool.
@@ -244,6 +261,10 @@ def prepare_batch_inputs(
         prompt: Text prompt (same for all images).
         crop_mode: Whether to use dynamic cropping.
         num_workers: Number of worker threads.
+        image_size: Local view image size (overrides settings).
+        base_size: Global view base size (overrides settings).
+        min_crops: Minimum number of crops (overrides settings).
+        max_crops: Maximum number of crops (overrides settings).
 
     Returns:
         List of dicts ready for batch inference.
@@ -252,7 +273,13 @@ def prepare_batch_inputs(
     from tqdm import tqdm
 
     def process_single(image):
-        return prepare_image_input(image, prompt, crop_mode)
+        return prepare_image_input(
+            image, prompt, crop_mode,
+            image_size=image_size,
+            base_size=base_size,
+            min_crops=min_crops,
+            max_crops=max_crops,
+        )
 
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         batch_inputs = list(tqdm(

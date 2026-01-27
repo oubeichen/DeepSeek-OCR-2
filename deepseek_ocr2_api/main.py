@@ -6,17 +6,21 @@ Supports PDF and image OCR with configurable parameters.
 """
 
 import logging
+import os
 import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.openapi.utils import get_openapi
 
 from .config import get_settings
 from .engine.manager import EngineManager
-from .routers import ocr_router, health_router
+from .routers import ocr_router, health_router, tasks_router
+from .task_manager import TaskManager
 from . import __version__
 
 # Configure logging
@@ -52,10 +56,20 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize engine: {e}")
         logger.warning("Server will start but OCR endpoints will not work until engine is initialized.")
 
+    # Start task worker
+    task_manager = TaskManager.get_instance()
+    task_manager.start_worker()
+    logger.info("Task worker started.")
+
     yield
 
     # Shutdown
     logger.info("Shutting down DeepSeek-OCR-2 API Server...")
+
+    # Stop task worker
+    task_manager = TaskManager.get_instance()
+    task_manager.stop_worker()
+
     try:
         manager = EngineManager.get_instance()
         manager.shutdown()
@@ -126,6 +140,10 @@ All parameters can be configured via:
     # Register routers
     app.include_router(health_router)
     app.include_router(ocr_router)
+    app.include_router(tasks_router)
+
+    # Get static files directory
+    static_dir = Path(__file__).parent / "static"
 
     # Global exception handler
     @app.exception_handler(Exception)
@@ -140,12 +158,15 @@ All parameters can be configured via:
             }
         )
 
-    # Root endpoint
+    # Root endpoint - serve web interface
     @app.get("/", tags=["Root"])
     async def root():
         """
-        Root endpoint with API information.
+        Serve the web interface.
         """
+        index_file = static_dir / "index.html"
+        if index_file.exists():
+            return FileResponse(index_file, media_type="text/html")
         return {
             "name": "DeepSeek-OCR-2 API",
             "version": __version__,

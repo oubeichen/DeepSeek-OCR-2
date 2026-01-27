@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepSeek OCR 2 - Web Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f8f9ff;
+        }
+
+        .upload-area.dragover {
+            background: #f0f0ff;
+            border-color: #764ba2;
+        }
+
+        .upload-icon {
+            font-size: 48px;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .tasks-list {
+            margin-top: 20px;
+        }
+
+        .task-item {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .task-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .task-id {
+            font-family: monospace;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .task-status {
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+
+        .status-pending {
+            background: #ffeaa7;
+            color: #856404;
+        }
+
+        .status-processing {
+            background: #74b9ff;
+            color: #004085;
+        }
+
+        .status-completed {
+            background: #55efc4;
+            color: #155724;
+        }
+
+        .status-failed {
+            background: #ff7675;
+            color: #721c24;
+        }
+
+        .task-details {
+            margin-top: 10px;
+            font-size: 0.95em;
+        }
+
+        .task-logs {
+            margin-top: 15px;
+            background: #2d3436;
+            color: #dfe6e9;
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 3px 0;
+        }
+
+        .log-timestamp {
+            color: #74b9ff;
+            margin-right: 10px;
+        }
+
+        .task-params {
+            margin-top: 10px;
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            padding: 10px;
+        }
+
+        .task-params-title {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+
+        .task-params-json {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            padding: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.75em;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 150px;
+            overflow-y: auto;
+            color: #333;
+        }
+
+        .btn-group {
+            margin-top: 10px;
+        }
+
+        .btn-small {
+            padding: 8px 15px;
+            font-size: 0.85em;
+            margin-right: 10px;
+        }
+
+        .btn-download {
+            background: #00b894;
+        }
+
+        .btn-delete {
+            background: #d63031;
+        }
+
+        .no-tasks {
+            text-align: center;
+            color: #999;
+            padding: 40px;
+            font-size: 1.1em;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+
+        .indicator-running {
+            background: #00b894;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .config-section {
+            margin-top: 20px;
+        }
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .config-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .config-item label {
+            font-weight: 500;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        .config-item input,
+        .config-item select,
+        .config-item textarea {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        .config-item textarea {
+            resize: vertical;
+            min-height: 80px;
+            font-family: monospace;
+        }
+
+        .preset-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .preset-btn {
+            padding: 8px 16px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+
+        .preset-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .preset-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .toggle-config {
+            cursor: pointer;
+            color: #667eea;
+            text-decoration: underline;
+            font-size: 0.9em;
+            margin-top: 10px;
+            display: inline-block;
+        }
+
+        .config-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .config-content.open {
+            max-height: 1000px;
+        }
+
+        /* Preview Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+        }
+
+        .modal.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            width: 95%;
+            height: 90%;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            font-size: 1.5em;
+        }
+
+        .close-btn {
+            background: white;
+            color: #667eea;
+            border: none;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s;
+        }
+
+        .close-btn:hover {
+            transform: scale(1.1);
+        }
+
+        .preview-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .preview-pane {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 2px solid #ddd;
+        }
+
+        .preview-pane:last-child {
+            border-right: none;
+        }
+
+        .preview-pane-header {
+            background: #f8f9fa;
+            padding: 15px;
+            border-bottom: 2px solid #ddd;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .preview-pane-content {
+            flex: 1;
+            position: relative;
+            background: #fff;
+        }
+
+        .preview-pane iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .preview-loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #667eea;
+            font-size: 1.2em;
+        }
+
+        .btn-preview {
+            background: #00b894;
+            margin-right: 5px;
+        }
+
+        .btn-preview:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>DeepSeek OCR 2</h1>
+            <p>强大的图像与PDF文档识别系统</p>
+        </div>
+
+        <div class="card">
+            <h2>上传文件</h2>
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📄</div>
+                <h3>拖拽文件到此处或点击选择</h3>
+                <p style="margin-top: 10px; color: #666;">支持 JPG, PNG, PDF 等格式</p>
+                <input type="file" id="fileInput" accept="image/*,.pdf">
+                <button class="btn" style="margin-top: 20px;" onclick="document.getElementById('fileInput').click()">
+                    选择文件
+                </button>
+            </div>
+
+            <div class="config-section">
+                <a class="toggle-config" onclick="toggleConfig()">⚙️ 高级配置</a>
+                <div class="config-content" id="configContent">
+                    <div class="config-grid">
+                        <div class="config-item">
+                            <label for="cropMode">Crop Mode (动态裁剪)</label>
+                            <select id="cropMode">
+                                <option value="true" selected>启用 (推荐)</option>
+                                <option value="false">禁用</option>
+                            </select>
+                        </div>
+                        <div class="config-item">
+                            <label for="temperature">Temperature (采样温度)</label>
+                            <input type="number" id="temperature" value="0" min="0" max="2" step="0.1">
+                        </div>
+                        <div class="config-item">
+                            <label for="maxTokens">Max Tokens (最大生成长度)</label>
+                            <input type="number" id="maxTokens" value="8192" min="256" max="16384" step="256">
+                        </div>
+                        <div class="config-item">
+                            <label for="dpi">PDF DPI (PDF转换分辨率)</label>
+                            <input type="number" id="dpi" value="144" min="72" max="600" step="36">
+                        </div>
+                    </div>
+
+                    <div class="config-item" style="margin-top: 15px;">
+                        <label for="prompt">Prompt (提示词)</label>
+                        <textarea id="prompt"><image>
+<|grounding|>Convert the document to markdown.</textarea>
+                        <small style="color: #666; margin-top: 5px;">
+                            常用提示词：
+                            <a href="#" onclick="setPrompt('document'); return false;">文档排版</a> |
+                            <a href="#" onclick="setPrompt('ocr'); return false;">图片OCR</a> |
+                            <a href="#" onclick="setPrompt('nolayout'); return false;">无布局OCR</a> |
+                            <a href="#" onclick="setPrompt('figure'); return false;">图表解析</a> |
+                            <a href="#" onclick="setPrompt('describe'); return false;">详细描述</a>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="totalTasks">0</div>
+                    <div class="stat-label">总任务数</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="queueSize">0</div>
+                    <div class="stat-label">队列中</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="engineStatus">-</div>
+                    <div class="stat-label">引擎状态</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>
+                任务列表
+                <button class="btn btn-small" onclick="refreshTasks()" style="float: right;">
+                    🔄 刷新
+                </button>
+            </h2>
+            <div class="tasks-list" id="tasksList">
+                <div class="no-tasks">暂无任务</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Preview Modal -->
+    <div id="previewModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📄 文件预览</h2>
+                <button class="close-btn" onclick="closePreview()">&times;</button>
+            </div>
+            <div class="preview-container">
+                <div class="preview-pane">
+                    <div class="preview-pane-header">📎 原始文件</div>
+                    <div class="preview-pane-content">
+                        <div class="preview-loading" id="originalLoading">加载中...</div>
+                        <iframe id="originalFrame" style="display:none;"></iframe>
+                    </div>
+                </div>
+                <div class="preview-pane">
+                    <div class="preview-pane-header">📝 识别结果 (Markdown)</div>
+                    <div class="preview-pane-content">
+                        <div class="preview-loading" id="resultLoading">等待任务完成...</div>
+                        <iframe id="resultFrame" style="display:none;"></iframe>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let pollingInterval = null;
+        let currentTasks = [];
+
+        // Load tasks from localStorage on startup
+        function loadTasksFromStorage() {
+            const stored = localStorage.getItem('ocrTasks');
+            if (stored) {
+                currentTasks = JSON.parse(stored);
+            }
+        }
+
+        // Save tasks to localStorage
+        function saveTasksToStorage() {
+            localStorage.setItem('ocrTasks', JSON.stringify(currentTasks));
+        }
+
+        // File upload handling
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+
+        uploadArea.addEventListener('click', () => {
+            if (event.target.tagName !== 'BUTTON') {
+                fileInput.click();
+            }
+        });
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                uploadFile(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                uploadFile(e.target.files[0]);
+            }
+        });
+
+        // Configuration functions
+        function toggleConfig() {
+            const content = document.getElementById('configContent');
+            content.classList.toggle('open');
+        }
+
+        function escapeHtml(str) {
+            if (typeof str !== 'string') {
+                return str;
+            }
+            return str
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function setPrompt(type) {
+            const prompts = {
+                document: '<image>\n<|grounding|>Convert the document to markdown.',
+                ocr: '<image>\n<|grounding|>OCR this image.',
+                nolayout: '<image>\nFree OCR.',
+                figure: '<image>\nParse the figure.',
+                describe: '<image>\nDescribe this image in detail.'
+            };
+            if (prompts[type]) {
+                document.getElementById('prompt').value = prompts[type];
+            }
+        }
+
+        function getOCRConfig() {
+            return {
+                crop_mode: document.getElementById('cropMode').value === 'true',
+                temperature: parseFloat(document.getElementById('temperature').value),
+                max_tokens: parseInt(document.getElementById('maxTokens').value),
+                dpi: parseInt(document.getElementById('dpi').value),
+                prompt: document.getElementById('prompt').value
+            };
+        }
+
+        async function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Add OCR configuration
+            const config = getOCRConfig();
+            for (const [key, value] of Object.entries(config)) {
+                formData.append(key, value);
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    alert(`文件上传成功！任务ID: ${data.task_id}`);
+                    currentTasks.push(data.task_id);
+                    saveTasksToStorage();
+                    refreshTasks();
+                } else {
+                    alert(`上传失败: ${data.detail}`);
+                }
+            } catch (error) {
+                alert(`上传失败: ${error.message}`);
+            }
+
+            fileInput.value = '';
+        }
+
+        async function refreshTasks() {
+            try {
+                const response = await fetch(`${API_BASE}/api/tasks?limit=100`);
+                const data = await response.json();
+
+                renderTasks(data.tasks);
+                document.getElementById('totalTasks').textContent = data.total;
+
+                // Update status
+                const statusResponse = await fetch(`${API_BASE}/api/status`);
+                const statusData = await statusResponse.json();
+                document.getElementById('queueSize').textContent = statusData.queue_size;
+
+                // Update engine status
+                const engineEl = document.getElementById('engineStatus');
+                if (statusData.engine_initialized) {
+                    engineEl.textContent = '就绪';
+                    engineEl.style.color = '#00b894';
+                } else {
+                    engineEl.textContent = '初始化中';
+                    engineEl.style.color = '#fdcb6e';
+                }
+            } catch (error) {
+                console.error('Failed to refresh tasks:', error);
+                document.getElementById('engineStatus').textContent = '离线';
+                document.getElementById('engineStatus').style.color = '#d63031';
+            }
+        }
+
+        function renderTasks(tasks) {
+            const tasksList = document.getElementById('tasksList');
+
+            if (tasks.length === 0) {
+                tasksList.innerHTML = '<div class="no-tasks">暂无任务</div>';
+                return;
+            }
+
+            tasksList.innerHTML = tasks.map(task => {
+                const statusClass = `status-${task.status}`;
+                const statusText = {
+                    'pending': '等待中',
+                    'processing': '处理中',
+                    'completed': '已完成',
+                    'failed': '失败'
+                }[task.status];
+
+                const logs = task.logs.slice(-5).map(log => `
+                    <div class="log-entry">
+                        <span class="log-timestamp">${new Date(log.timestamp).toLocaleTimeString()}</span>
+                        <span>${log.message}</span>
+                    </div>
+                `).join('');
+
+                // Format OCR parameters as JSON
+                const paramsHtml = task.ocr_params ? `
+                    <div class="task-params">
+                        <div class="task-params-title">📋 OCR 参数配置</div>
+                        <div class="task-params-json">${escapeHtml(JSON.stringify(task.ocr_params, null, 2))}</div>
+                    </div>
+                ` : '';
+
+                return `
+                    <div class="task-item">
+                        <div class="task-header">
+                            <div>
+                                <strong>${task.filename}</strong>
+                                <div class="task-id">ID: ${task.task_id}</div>
+                            </div>
+                            <span class="task-status ${statusClass}">${statusText}</span>
+                        </div>
+                        <div class="task-details">
+                            <div>类型: ${task.task_type === 'image' ? '图片' : 'PDF'}</div>
+                            <div>创建时间: ${new Date(task.created_at).toLocaleString()}</div>
+                            ${task.completed_at ? `<div>完成时间: ${new Date(task.completed_at).toLocaleString()}</div>` : ''}
+                            ${task.error_message ? `<div style="color: red;">错误: ${task.error_message}</div>` : ''}
+                        </div>
+                        ${paramsHtml}
+                        ${logs ? `<div class="task-logs">${logs}</div>` : ''}
+                        <div class="btn-group">
+                            <button class="btn btn-small btn-preview" onclick="openPreview('${task.task_id}', '${task.status}')">
+                                👁️ 预览
+                            </button>
+                            ${task.status === 'completed' ? `
+                                <button class="btn btn-small btn-download" onclick="downloadResult('${task.task_id}')">
+                                    ⬇️ 下载结果
+                                </button>
+                            ` : ''}
+                            <button class="btn btn-small btn-delete" onclick="deleteTask('${task.task_id}')">
+                                🗑️ 删除
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function downloadResult(taskId) {
+            window.location.href = `${API_BASE}/api/tasks/${taskId}/download`;
+        }
+
+        async function deleteTask(taskId) {
+            if (!confirm('确定要删除这个任务吗？')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}/api/tasks/${taskId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    currentTasks = currentTasks.filter(id => id !== taskId);
+                    saveTasksToStorage();
+                    refreshTasks();
+                } else {
+                    alert('删除失败');
+                }
+            } catch (error) {
+                alert(`删除失败: ${error.message}`);
+            }
+        }
+
+        // Preview functionality
+        function openPreview(taskId, status) {
+            const modal = document.getElementById('previewModal');
+            const originalFrame = document.getElementById('originalFrame');
+            const resultFrame = document.getElementById('resultFrame');
+            const originalLoading = document.getElementById('originalLoading');
+            const resultLoading = document.getElementById('resultLoading');
+
+            // Reset frames
+            originalFrame.style.display = 'none';
+            resultFrame.style.display = 'none';
+            originalLoading.style.display = 'block';
+            resultLoading.style.display = 'block';
+
+            // Show modal
+            modal.classList.add('show');
+
+            // Load original file
+            originalLoading.textContent = '加载原始文件...';
+            originalFrame.src = `${API_BASE}/api/tasks/${taskId}/preview/original`;
+
+            originalFrame.onload = function() {
+                originalLoading.style.display = 'none';
+                originalFrame.style.display = 'block';
+            };
+
+            originalFrame.onerror = function() {
+                originalLoading.textContent = '❌ 加载失败';
+            };
+
+            // Load result if completed
+            if (status === 'completed') {
+                resultLoading.textContent = '加载识别结果...';
+                resultFrame.src = `${API_BASE}/api/tasks/${taskId}/preview/result`;
+
+                resultFrame.onload = function() {
+                    resultLoading.style.display = 'none';
+                    resultFrame.style.display = 'block';
+                };
+
+                resultFrame.onerror = function() {
+                    resultLoading.textContent = '❌ 加载失败';
+                };
+            } else {
+                resultLoading.textContent = status === 'processing' ? '⏳ 处理中，请稍候...' : '⏸️ 等待任务完成';
+            }
+        }
+
+        function closePreview() {
+            const modal = document.getElementById('previewModal');
+            modal.classList.remove('show');
+
+            // Clear iframe sources to stop loading
+            document.getElementById('originalFrame').src = '';
+            document.getElementById('resultFrame').src = '';
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('previewModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closePreview();
+            }
+        });
+
+        // Close modal with ESC key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closePreview();
+            }
+        });
+
+        // Auto-refresh every 3 seconds
+        function startPolling() {
+            refreshTasks();
+            pollingInterval = setInterval(refreshTasks, 3000);
+        }
+
+        function stopPolling() {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+            }
+        }
+
+        // Initialize
+        loadTasksFromStorage();
+        startPolling();
+
+        // Stop polling when page is hidden
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                stopPolling();
+            } else {
+                startPolling();
+            }
+        });
+    </script>
+</body>
+</html>
