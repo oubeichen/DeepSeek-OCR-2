@@ -21,19 +21,19 @@ def parse_args():
     server_group.add_argument(
         "--host",
         type=str,
-        default="0.0.0.0",
+        default=os.getenv("DEEPSEEK_OCR2_HOST", "0.0.0.0"),
         help="Server host address",
     )
     server_group.add_argument(
         "--port",
         type=int,
-        default=8000,
+        default=int(os.getenv("DEEPSEEK_OCR2_PORT", "8000")),
         help="Server port",
     )
     server_group.add_argument(
         "--workers",
         type=int,
-        default=1,
+        default=int(os.getenv("DEEPSEEK_OCR2_WORKERS", "1")),
         help="Number of uvicorn workers",
     )
     server_group.add_argument(
@@ -47,13 +47,13 @@ def parse_args():
     model_group.add_argument(
         "--model-path",
         type=str,
-        default="deepseek-ai/DeepSeek-OCR-2",
+        default=os.getenv("DEEPSEEK_OCR2_MODEL_PATH", "deepseek-ai/DeepSeek-OCR-2"),
         help="Path to the model (HuggingFace ID or local path)",
     )
     model_group.add_argument(
         "--dtype",
         type=str,
-        default="bfloat16",
+        default=os.getenv("DEEPSEEK_OCR2_DTYPE", "bfloat16"),
         choices=["bfloat16", "float16", "float32"],
         help="Data type for model weights",
     )
@@ -63,19 +63,19 @@ def parse_args():
     gpu_group.add_argument(
         "--cuda-devices",
         type=str,
-        default="0",
+        default=os.getenv("DEEPSEEK_OCR2_CUDA_VISIBLE_DEVICES", "0"),
         help="CUDA visible devices (e.g., '0', '0,1')",
     )
     gpu_group.add_argument(
         "--gpu-memory-utilization",
         type=float,
-        default=0.9,
+        default=float(os.getenv("DEEPSEEK_OCR2_GPU_MEMORY_UTILIZATION", "0.9")),
         help="GPU memory utilization ratio (0.1-1.0)",
     )
     gpu_group.add_argument(
         "--tensor-parallel-size",
         type=int,
-        default=1,
+        default=int(os.getenv("DEEPSEEK_OCR2_TENSOR_PARALLEL_SIZE", "1")),
         help="Number of GPUs for tensor parallelism",
     )
 
@@ -84,19 +84,19 @@ def parse_args():
     vllm_group.add_argument(
         "--max-model-len",
         type=int,
-        default=8192,
+        default=int(os.getenv("DEEPSEEK_OCR2_MAX_MODEL_LEN", "8192")),
         help="Maximum sequence length",
     )
     vllm_group.add_argument(
         "--block-size",
         type=int,
-        default=256,
+        default=int(os.getenv("DEEPSEEK_OCR2_BLOCK_SIZE", "256")),
         help="KV cache block size",
     )
     vllm_group.add_argument(
         "--max-num-seqs",
         type=int,
-        default=100,
+        default=int(os.getenv("DEEPSEEK_OCR2_MAX_NUM_SEQS", "100")),
         help="Maximum number of concurrent sequences",
     )
     vllm_group.add_argument(
@@ -110,7 +110,7 @@ def parse_args():
     engine_group.add_argument(
         "--engine-mode",
         type=str,
-        default="sync",
+        default=os.getenv("DEEPSEEK_OCR2_ENGINE_MODE", "sync"),
         choices=["sync", "async"],
         help="Engine mode: sync for LLM, async for AsyncLLMEngine",
     )
@@ -120,25 +120,25 @@ def parse_args():
     image_group.add_argument(
         "--image-size",
         type=int,
-        default=768,
+        default=int(os.getenv("DEEPSEEK_OCR2_IMAGE_SIZE", "768")),
         help="Local view image size",
     )
     image_group.add_argument(
         "--base-size",
         type=int,
-        default=1024,
+        default=int(os.getenv("DEEPSEEK_OCR2_BASE_SIZE", "1024")),
         help="Global view image size",
     )
     image_group.add_argument(
         "--min-crops",
         type=int,
-        default=2,
+        default=int(os.getenv("DEEPSEEK_OCR2_MIN_CROPS", "2")),
         help="Minimum number of crops",
     )
     image_group.add_argument(
         "--max-crops",
         type=int,
-        default=6,
+        default=int(os.getenv("DEEPSEEK_OCR2_MAX_CROPS", "6")),
         help="Maximum number of crops",
     )
     image_group.add_argument(
@@ -152,25 +152,25 @@ def parse_args():
     sampling_group.add_argument(
         "--temperature",
         type=float,
-        default=0.0,
+        default=float(os.getenv("DEEPSEEK_OCR2_TEMPERATURE", "0.0")),
         help="Sampling temperature",
     )
     sampling_group.add_argument(
         "--max-tokens",
         type=int,
-        default=8192,
+        default=int(os.getenv("DEEPSEEK_OCR2_MAX_TOKENS", "8192")),
         help="Maximum tokens to generate",
     )
     sampling_group.add_argument(
         "--ngram-size",
         type=int,
-        default=20,
+        default=int(os.getenv("DEEPSEEK_OCR2_NGRAM_SIZE", "20")),
         help="N-gram size for repetition penalty",
     )
     sampling_group.add_argument(
         "--window-size",
         type=int,
-        default=90,
+        default=int(os.getenv("DEEPSEEK_OCR2_WINDOW_SIZE", "90")),
         help="Window size for N-gram check",
     )
 
@@ -179,7 +179,7 @@ def parse_args():
     pdf_group.add_argument(
         "--pdf-dpi",
         type=int,
-        default=144,
+        default=int(os.getenv("DEEPSEEK_OCR2_PDF_DPI", "144")),
         help="DPI for PDF to image conversion",
     )
 
@@ -187,7 +187,7 @@ def parse_args():
     parser.add_argument(
         "--default-prompt",
         type=str,
-        default="<image>\n<|grounding|>Convert the document to markdown.",
+        default=os.getenv("DEEPSEEK_OCR2_DEFAULT_PROMPT", "<image>\n<|grounding|>Convert the document to markdown."),
         help="Default prompt for OCR",
     )
 
@@ -227,7 +227,9 @@ def main():
     }
 
     for key, value in env_mapping.items():
-        os.environ[key] = value
+        # Only set if not already in environment (preserves .env file values)
+        if key not in os.environ:
+            os.environ[key] = value
 
     # Import uvicorn here to avoid import issues
     import uvicorn
