@@ -275,13 +275,32 @@ def process_output(
             - raw_output: Original output
             - annotated_image_path: Path to annotated image
             - extracted_images: List of extracted image paths
+            - elements: List of detected elements with coordinates
+            - image_info: Image dimensions and metadata
     """
     # Create output directories
     images_dir = os.path.join(output_dir, "images")
     os.makedirs(images_dir, exist_ok=True)
 
+    # Get image dimensions
+    image_width, image_height = image.size
+
     # Extract references
     refs, image_refs, other_refs = extract_refs(text)
+
+    # Build detailed elements list
+    elements = []
+    for ref in refs:
+        for coords in ref.coordinates:
+            if len(coords) != 4:
+                continue
+            # Convert to pixel coordinates
+            x1, y1, x2, y2 = convert_coordinates(coords, image_width, image_height)
+            elements.append({
+                "type": ref.label_type,
+                "bbox_normalized": coords,  # Original 0-999 coordinates
+                "bbox_pixels": [x1, y1, x2, y2],  # Pixel coordinates
+            })
 
     # Draw boxes and extract images
     annotated_image = None
@@ -311,6 +330,12 @@ def process_output(
         "raw_output": text,
         "annotated_image_path": annotated_path,
         "extracted_images": extracted_images,
+        "elements": elements,
+        "image_info": {
+            "width": image_width,
+            "height": image_height,
+            "mode": image.mode,
+        },
     }
 
 

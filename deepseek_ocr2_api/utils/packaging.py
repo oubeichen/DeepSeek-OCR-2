@@ -41,6 +41,13 @@ def create_result_package(
 
     zip_path = os.path.join(output_dir, f"{package_name}.zip")
 
+    # Build document.json structure
+    document_data = {
+        "created_at": datetime.now().isoformat(),
+        "total_pages": len(results),
+        "pages": [],
+    }
+
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         # Collect all markdown content
         all_markdown = []
@@ -61,16 +68,31 @@ def create_result_package(
 
             # Add annotated image
             annotated_path = result.get("annotated_image_path")
+            annotated_arcname = None
             if annotated_path and os.path.exists(annotated_path):
-                arcname = f"annotated/page_{idx}.jpg"
-                zipf.write(annotated_path, arcname)
+                annotated_arcname = f"annotated/page_{idx}.jpg"
+                zipf.write(annotated_path, annotated_arcname)
 
             # Add extracted images
+            extracted_arcnames = []
             for img_path in result.get("extracted_images", []):
                 if os.path.exists(img_path):
                     img_name = os.path.basename(img_path)
                     arcname = f"images/{img_name}"
                     zipf.write(img_path, arcname)
+                    extracted_arcnames.append(arcname)
+
+            # Build page data for document.json
+            page_data = {
+                "page_index": idx,
+                "markdown": markdown_content,
+                "raw_output": raw_output,
+                "annotated_image": annotated_arcname,
+                "extracted_images": extracted_arcnames,
+                "elements": result.get("elements", []),
+                "image_info": result.get("image_info", {}),
+            }
+            document_data["pages"].append(page_data)
 
         # Add combined markdown
         combined_md = "\n\n---\n\n".join(all_markdown)
@@ -81,7 +103,16 @@ def create_result_package(
         with open(combined_md_path, 'w', encoding='utf-8') as f:
             f.write(combined_md)
 
-        # Add metadata
+        # Add document.json
+        document_json_content = json.dumps(document_data, indent=2, ensure_ascii=False)
+        zipf.writestr("document.json", document_json_content)
+
+        # Also save document.json to output_dir for preview/access
+        document_json_path = os.path.join(output_dir, "document.json")
+        with open(document_json_path, 'w', encoding='utf-8') as f:
+            f.write(document_json_content)
+
+        # Add metadata (legacy format for backwards compatibility)
         if include_metadata:
             metadata = {
                 "created_at": datetime.now().isoformat(),
@@ -89,6 +120,7 @@ def create_result_package(
                 "files": {
                     "markdown": [f"page_{i}.md" for i in range(len(results))],
                     "combined": "combined.md",
+                    "document_json": "document.json",
                     "annotated": [f"annotated/page_{i}.jpg" for i in range(len(results))
                                  if results[i].get("annotated_image_path")],
                     "images": []
@@ -131,6 +163,16 @@ def create_pdf_result_package(
     package_name = f"{original_filename}_{timestamp}"
     zip_path = os.path.join(output_dir, f"{package_name}.zip")
 
+    # Build document.json structure
+    document_data = {
+        "created_at": datetime.now().isoformat(),
+        "original_filename": original_filename,
+        "total_pages": len(results),
+        "page_separator": page_separator,
+        "annotated_pdf": f"{original_filename}_annotated.pdf" if annotated_pdf_path else None,
+        "pages": [],
+    }
+
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
         # Combine all markdown with page separators
         all_markdown = []
@@ -143,6 +185,32 @@ def create_pdf_result_package(
             raw = result.get("raw_output", "")
             if raw:
                 all_raw.append(raw)
+
+            # Collect extracted images for this page
+            extracted_arcnames = []
+            for img_path in result.get("extracted_images", []):
+                if os.path.exists(img_path):
+                    img_name = os.path.basename(img_path)
+                    extracted_arcnames.append(f"images/{img_name}")
+
+            # Get annotated image path for this page
+            annotated_image = result.get("annotated_image_path")
+            annotated_arcname = None
+            if annotated_image and os.path.exists(annotated_image):
+                annotated_arcname = f"annotated/page_{idx}.jpg"
+                zipf.write(annotated_image, annotated_arcname)
+
+            # Build page data for document.json
+            page_data = {
+                "page_index": idx,
+                "markdown": markdown,
+                "raw_output": raw,
+                "annotated_image": annotated_arcname,
+                "extracted_images": extracted_arcnames,
+                "elements": result.get("elements", []),
+                "image_info": result.get("image_info", {}),
+            }
+            document_data["pages"].append(page_data)
 
         # Combined markdown
         combined_md = page_separator.join(all_markdown)
@@ -170,13 +238,23 @@ def create_pdf_result_package(
                 if os.path.isfile(img_path):
                     zipf.write(img_path, f"images/{img_file}")
 
-        # Add metadata
+        # Add document.json
+        document_json_content = json.dumps(document_data, indent=2, ensure_ascii=False)
+        zipf.writestr("document.json", document_json_content)
+
+        # Also save document.json to output_dir for preview/access
+        document_json_path = os.path.join(output_dir, "document.json")
+        with open(document_json_path, 'w', encoding='utf-8') as f:
+            f.write(document_json_content)
+
+        # Add metadata (legacy format for backwards compatibility)
         metadata = {
             "created_at": datetime.now().isoformat(),
             "original_filename": original_filename,
             "total_pages": len(results),
             "files": {
                 "markdown": f"{original_filename}.md",
+                "document_json": "document.json",
                 "annotated_pdf": f"{original_filename}_annotated.pdf" if annotated_pdf_path else None,
                 "images_dir": "images/"
             }
