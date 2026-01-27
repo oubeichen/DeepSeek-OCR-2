@@ -207,6 +207,16 @@ class Settings(BaseSettings):
         description="Enable auto-reload for development"
     )
 
+    # ====================
+    # Task Queue Settings
+    # ====================
+    task_workers: int = Field(
+        default=4,
+        ge=1,
+        le=32,
+        description="Number of concurrent task workers for queue processing (share single GPU engine)"
+    )
+
     # =================
     # Output Settings
     # =================
