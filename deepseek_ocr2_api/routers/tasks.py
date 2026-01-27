@@ -321,10 +321,14 @@ async def preview_original(task_id: str):
         else:
             mime_type = "image/png"
 
+        # Encode filename for Content-Disposition header (RFC 5987)
+    from urllib.parse import quote
+    encoded_filename = quote(task.filename)
+    
     return FileResponse(
         path=task.input_file_path,
         media_type=mime_type,
-        headers={"Content-Disposition": f"inline; filename=\"{task.filename}\""},
+        headers={"Content-Disposition": f"inline; filename*=UTF-8''{encoded_filename}"},
     )
 
 
