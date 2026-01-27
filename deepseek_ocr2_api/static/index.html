@@ -600,6 +600,11 @@
             background: #95a5a6;
             cursor: not-allowed;
         }
+
+        .btn-reset {
+            background: #b2bec3;
+            color: #2d3436;
+        }
     </style>
 </head>
 <body>
@@ -629,7 +634,10 @@
             </div>
 
             <div class="config-section">
-                <a class="toggle-config" onclick="toggleConfig()">⚙️ 高级配置</a>
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                    <a class="toggle-config" onclick="toggleConfig()">⚙️ 高级配置</a>
+                    <button class="btn btn-small btn-reset" type="button" id="clearFormBtn">清除本地配置</button>
+                </div>
                 <div class="config-content" id="configContent">
                     <!-- Presets -->
                     <div style="margin-bottom: 15px;">
@@ -1007,6 +1015,18 @@
             }
         }
 
+        function clearFormState() {
+            localStorage.removeItem(FORM_STATE_KEY);
+            if (serverConfig) {
+                applyConfigToForm(serverConfig);
+            }
+            document.getElementById('promptTemplate').value = '';
+            document.querySelectorAll('.preset-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.preset === 'standard');
+            });
+            saveFormState();
+        }
+
         // Load tasks from localStorage on startup
         function loadTasksFromStorage() {
             const stored = localStorage.getItem('ocrTasks');
@@ -1087,6 +1107,12 @@
             e.stopPropagation();
             if (currentUploadXhr) {
                 currentUploadXhr.abort();
+            }
+        });
+
+        document.getElementById('clearFormBtn').addEventListener('click', () => {
+            if (confirm('确定清除本地配置并恢复默认值吗？')) {
+                clearFormState();
             }
         });
 
