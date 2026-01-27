@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DeepSeek OCR 2 - Web Interface</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="vendor/katex/katex.min.css">
     <style>
         * {
             margin: 0;
@@ -491,12 +492,68 @@
             flex: 1;
             position: relative;
             background: #fff;
+            overflow: auto;
         }
 
         .preview-pane iframe {
             width: 100%;
             height: 100%;
             border: none;
+        }
+
+        .markdown-content {
+            padding: 20px;
+            color: #2d3436;
+            line-height: 1.7;
+            font-size: 0.98em;
+        }
+
+        .markdown-content h1,
+        .markdown-content h2,
+        .markdown-content h3,
+        .markdown-content h4,
+        .markdown-content h5,
+        .markdown-content h6 {
+            margin: 1.2em 0 0.6em;
+            color: #2f3640;
+        }
+
+        .markdown-content pre {
+            background: #f4f4f4;
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+        }
+
+        .markdown-content code {
+            background: #f4f4f4;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .markdown-content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 15px 0;
+        }
+
+        .markdown-content th,
+        .markdown-content td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        .markdown-content th {
+            background: #f4f4f4;
+        }
+
+        .markdown-content blockquote {
+            border-left: 4px solid #667eea;
+            margin: 0;
+            padding-left: 15px;
+            color: #666;
         }
 
         .preview-loading {
@@ -728,13 +785,16 @@
                     <div class="preview-pane-header">📝 识别结果 (Markdown)</div>
                     <div class="preview-pane-content">
                         <div class="preview-loading" id="resultLoading">等待任务完成...</div>
-                        <iframe id="resultFrame" style="display:none;"></iframe>
+                        <div id="resultContent" class="markdown-content" style="display:none;"></div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
+    <script src="vendor/marked/marked.min.js"></script>
+    <script src="vendor/katex/katex.min.js"></script>
+    <script src="vendor/marked-katex-extension/index.umd.js"></script>
     <script>
         const API_BASE = window.location.origin;
         let pollingInterval = null;
@@ -742,6 +802,7 @@
         let serverConfig = null;
         let promptTemplates = {};
         let presets = {};
+        let previewRequestToken = 0;
 
         // Load configuration from server
         async function loadConfig() {
@@ -933,6 +994,42 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#39;');
+        }
+
+        function initMarkdownRenderer() {
+            if (!window.marked) {
+                return;
+            }
+            if (window.markedKatex) {
+                window.marked.use(window.markedKatex({
+                    throwOnError: false,
+                    output: 'html'
+                }));
+            }
+            window.marked.setOptions({
+                gfm: true,
+                breaks: true
+            });
+        }
+
+        function extractMarkdownFromPreview(htmlText) {
+            try {
+                const doc = new DOMParser().parseFromString(htmlText, 'text/html');
+                const pre = doc.querySelector('pre');
+                if (pre) {
+                    return pre.textContent || '';
+                }
+            } catch (error) {
+                console.warn('Failed to parse preview HTML:', error);
+            }
+            return htmlText || '';
+        }
+
+        function renderMarkdown(markdownText) {
+            if (window.marked) {
+                return window.marked.parse(markdownText || '');
+            }
+            return `<pre>${escapeHtml(markdownText || '')}</pre>`;
         }
 
         function setPrompt(type) {
@@ -1198,13 +1295,15 @@
         function openPreview(taskId, status) {
             const modal = document.getElementById('previewModal');
             const originalFrame = document.getElementById('originalFrame');
-            const resultFrame = document.getElementById('resultFrame');
+            const resultContent = document.getElementById('resultContent');
             const originalLoading = document.getElementById('originalLoading');
             const resultLoading = document.getElementById('resultLoading');
+            const currentToken = ++previewRequestToken;
 
             // Reset frames
             originalFrame.style.display = 'none';
-            resultFrame.style.display = 'none';
+            resultContent.style.display = 'none';
+            resultContent.innerHTML = '';
             originalLoading.style.display = 'block';
             resultLoading.style.display = 'block';
 
@@ -1227,16 +1326,23 @@
             // Load result if completed
             if (status === 'completed') {
                 resultLoading.textContent = '加载识别结果...';
-                resultFrame.src = `${API_BASE}/api/tasks/${taskId}/preview/result`;
-
-                resultFrame.onload = function() {
-                    resultLoading.style.display = 'none';
-                    resultFrame.style.display = 'block';
-                };
-
-                resultFrame.onerror = function() {
-                    resultLoading.textContent = '❌ 加载失败';
-                };
+                fetch(`${API_BASE}/api/tasks/${taskId}/preview/result`)
+                    .then((response) => response.text())
+                    .then((htmlText) => {
+                        if (currentToken !== previewRequestToken) {
+                            return;
+                        }
+                        const markdown = extractMarkdownFromPreview(htmlText);
+                        resultContent.innerHTML = renderMarkdown(markdown);
+                        resultLoading.style.display = 'none';
+                        resultContent.style.display = 'block';
+                    })
+                    .catch(() => {
+                        if (currentToken !== previewRequestToken) {
+                            return;
+                        }
+                        resultLoading.textContent = '❌ 加载失败';
+                    });
             } else {
                 resultLoading.textContent = status === 'processing' ? '⏳ 处理中，请稍候...' : '⏸️ 等待任务完成';
             }
@@ -1245,10 +1351,13 @@
         function closePreview() {
             const modal = document.getElementById('previewModal');
             modal.classList.remove('show');
+            previewRequestToken += 1;
 
             // Clear iframe sources to stop loading
             document.getElementById('originalFrame').src = '';
-            document.getElementById('resultFrame').src = '';
+            const resultContent = document.getElementById('resultContent');
+            resultContent.innerHTML = '';
+            resultContent.style.display = 'none';
         }
 
         // Close modal when clicking outside
@@ -1279,6 +1388,7 @@
 
         // Initialize
         loadTasksFromStorage();
+        initMarkdownRenderer();
         loadConfig();  // Load server configuration
         startPolling();
 
