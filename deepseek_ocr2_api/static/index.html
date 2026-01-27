@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DeepSeek OCR 2 - Web Interface</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
     <style>
         * {
             margin: 0;
@@ -61,6 +62,12 @@
             background: #f8f9ff;
         }
 
+        .upload-area.uploading {
+            background: #f3f4ff;
+            border-color: #b2b7ff;
+            cursor: default;
+        }
+
         .upload-area.dragover {
             background: #f0f0ff;
             border-color: #764ba2;
@@ -90,6 +97,47 @@
         .btn:disabled {
             opacity: 0.6;
             cursor: not-allowed;
+        }
+
+        .upload-actions {
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .upload-progress {
+            width: 100%;
+            max-width: 360px;
+            margin: 10px auto 0;
+            display: none;
+        }
+
+        .upload-progress-text {
+            font-size: 0.9em;
+            color: #555;
+            margin-bottom: 6px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e9ecff;
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.2s ease;
+        }
+
+        .btn-cancel {
+            background: #b2bec3;
         }
 
         .tasks-list {
@@ -485,9 +533,16 @@
                 <h3>拖拽文件到此处或点击选择</h3>
                 <p style="margin-top: 10px; color: #666;">支持 JPG, PNG, PDF 等格式</p>
                 <input type="file" id="fileInput" accept="image/*,.pdf">
-                <button class="btn" style="margin-top: 20px;" onclick="document.getElementById('fileInput').click()">
-                    选择文件
-                </button>
+                <div class="upload-actions">
+                    <button class="btn" id="uploadButton" type="button">选择文件</button>
+                    <button class="btn btn-cancel" id="uploadCancelBtn" type="button" style="display: none;">取消上传</button>
+                </div>
+                <div class="upload-progress" id="uploadProgress">
+                    <div class="upload-progress-text" id="uploadProgressText">上传中...</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="uploadProgressFill"></div>
+                    </div>
+                </div>
             </div>
 
             <div class="config-section">
@@ -795,9 +850,32 @@
         // File upload handling
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
+        const uploadButton = document.getElementById('uploadButton');
+        const uploadProgress = document.getElementById('uploadProgress');
+        const uploadProgressText = document.getElementById('uploadProgressText');
+        const uploadProgressFill = document.getElementById('uploadProgressFill');
+        const uploadCancelBtn = document.getElementById('uploadCancelBtn');
+        let isUploading = false;
+        let currentUploadXhr = null;
 
-        uploadArea.addEventListener('click', () => {
-            if (event.target.tagName !== 'BUTTON') {
+        function setUploadingState(uploading) {
+            isUploading = uploading;
+            uploadArea.classList.toggle('uploading', uploading);
+            fileInput.disabled = uploading;
+            uploadButton.disabled = uploading;
+            uploadCancelBtn.style.display = uploading ? 'inline-block' : 'none';
+            uploadProgress.style.display = uploading ? 'block' : 'none';
+            if (!uploading) {
+                uploadProgressFill.style.width = '0%';
+                uploadProgressText.textContent = '';
+            }
+        }
+
+        uploadArea.addEventListener('click', (e) => {
+            if (isUploading) {
+                return;
+            }
+            if (e.target.tagName !== 'BUTTON') {
                 fileInput.click();
             }
         });
@@ -823,6 +901,19 @@
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 uploadFile(e.target.files[0]);
+            }
+        });
+
+        uploadButton.addEventListener('click', () => {
+            if (!isUploading) {
+                fileInput.click();
+            }
+        });
+
+        uploadCancelBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (currentUploadXhr) {
+                currentUploadXhr.abort();
             }
         });
 
@@ -883,6 +974,9 @@
         }
 
         async function uploadFile(file) {
+            if (isUploading) {
+                return;
+            }
             const formData = new FormData();
             formData.append('file', file);
 
@@ -892,27 +986,57 @@
                 formData.append(key, value);
             }
 
-            try {
-                const response = await fetch(`${API_BASE}/api/upload`, {
-                    method: 'POST',
-                    body: formData
-                });
+            setUploadingState(true);
 
-                const data = await response.json();
+            const xhr = new XMLHttpRequest();
+            currentUploadXhr = xhr;
+            xhr.open('POST', `${API_BASE}/api/upload`, true);
+            xhr.responseType = 'json';
 
-                if (response.ok) {
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                    const percent = Math.round((e.loaded / e.total) * 100);
+                    uploadProgressFill.style.width = `${percent}%`;
+                    uploadProgressText.textContent = `上传中... ${percent}%`;
+                } else {
+                    uploadProgressFill.style.width = '0%';
+                    uploadProgressText.textContent = '上传中...';
+                }
+            };
+
+            const cleanup = () => {
+                setUploadingState(false);
+                fileInput.value = '';
+                currentUploadXhr = null;
+            };
+
+            xhr.onload = () => {
+                const data = xhr.response || {};
+                if (xhr.status >= 200 && xhr.status < 300) {
                     alert(`文件上传成功！任务ID: ${data.task_id}`);
-                    currentTasks.push(data.task_id);
-                    saveTasksToStorage();
+                    if (data.task_id) {
+                        currentTasks.push(data.task_id);
+                        saveTasksToStorage();
+                    }
                     refreshTasks();
                 } else {
-                    alert(`上传失败: ${data.detail}`);
+                    const detail = data && data.detail ? data.detail : `HTTP ${xhr.status}`;
+                    alert(`上传失败: ${detail}`);
                 }
-            } catch (error) {
-                alert(`上传失败: ${error.message}`);
-            }
+                cleanup();
+            };
 
-            fileInput.value = '';
+            xhr.onerror = () => {
+                alert('上传失败: 网络错误');
+                cleanup();
+            };
+
+            xhr.onabort = () => {
+                alert('已取消上传');
+                cleanup();
+            };
+
+            xhr.send(formData);
         }
 
         async function refreshTasks() {
