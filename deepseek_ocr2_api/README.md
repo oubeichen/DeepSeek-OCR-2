@@ -23,11 +23,11 @@
 ## 安装
 
 ```bash
-# 安装依赖
-pip install -r deepseek_ocr2_api/requirements.txt
+# 1. 先安装项目基础依赖（参考项目根目录 README.md）
+pip install -r requirements.txt
 
-# 或者使用 pip install
-pip install fastapi uvicorn python-multipart pydantic-settings pillow pymupdf tqdm numpy matplotlib
+# 2. 安装 API 服务额外依赖
+pip install -r deepseek_ocr2_api/requirements.txt
 ```
 
 ## 快速开始
