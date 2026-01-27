@@ -493,40 +493,132 @@
             <div class="config-section">
                 <a class="toggle-config" onclick="toggleConfig()">⚙️ 高级配置</a>
                 <div class="config-content" id="configContent">
-                    <div class="config-grid">
-                        <div class="config-item">
-                            <label for="cropMode">Crop Mode (动态裁剪)</label>
-                            <select id="cropMode">
-                                <option value="true" selected>启用 (推荐)</option>
-                                <option value="false">禁用</option>
-                            </select>
-                        </div>
-                        <div class="config-item">
-                            <label for="temperature">Temperature (采样温度)</label>
-                            <input type="number" id="temperature" value="0" min="0" max="2" step="0.1">
-                        </div>
-                        <div class="config-item">
-                            <label for="maxTokens">Max Tokens (最大生成长度)</label>
-                            <input type="number" id="maxTokens" value="8192" min="256" max="16384" step="256">
-                        </div>
-                        <div class="config-item">
-                            <label for="dpi">PDF DPI (PDF转换分辨率)</label>
-                            <input type="number" id="dpi" value="144" min="72" max="600" step="36">
+                    <!-- Presets -->
+                    <div style="margin-bottom: 15px;">
+                        <label style="font-weight: bold; display: block; margin-bottom: 8px;">快速预设</label>
+                        <div class="preset-buttons">
+                            <button type="button" class="preset-btn" onclick="applyPreset('fast')">🚀 快速模式</button>
+                            <button type="button" class="preset-btn active" onclick="applyPreset('standard')">⚖️ 标准模式</button>
+                            <button type="button" class="preset-btn" onclick="applyPreset('quality')">✨ 高质量模式</button>
                         </div>
                     </div>
 
-                    <div class="config-item" style="margin-top: 15px;">
-                        <label for="prompt">Prompt (提示词)</label>
-                        <textarea id="prompt"><image>
+                    <!-- Sampling Parameters -->
+                    <div style="margin-bottom: 15px;">
+                        <h4 style="color: #667eea; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px;">采样参数 (Sampling)</h4>
+                        <div class="config-grid">
+                            <div class="config-item">
+                                <label for="temperature">Temperature (采样温度)</label>
+                                <input type="number" id="temperature" value="0" min="0" max="2" step="0.1">
+                                <small style="color: #999;">0=确定性, 越高越随机</small>
+                            </div>
+                            <div class="config-item">
+                                <label for="maxTokens">Max Tokens (最大生成长度)</label>
+                                <input type="number" id="maxTokens" value="8192" min="256" max="16384" step="256">
+                                <small style="color: #999;">生成文本的最大token数</small>
+                            </div>
+                            <div class="config-item">
+                                <label for="ngramSize">N-gram Size (重复惩罚N-gram)</label>
+                                <input type="number" id="ngramSize" value="10" min="1" max="20" step="1">
+                                <small style="color: #999;">防止重复的N-gram大小</small>
+                            </div>
+                            <div class="config-item">
+                                <label for="windowSize">Window Size (检查窗口)</label>
+                                <input type="number" id="windowSize" value="1024" min="50" max="4096" step="50">
+                                <small style="color: #999;">N-gram检查的窗口大小</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Image Processing Parameters -->
+                    <div style="margin-bottom: 15px;">
+                        <h4 style="color: #667eea; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px;">图像处理参数 (Image Processing)</h4>
+                        <div class="config-grid">
+                            <div class="config-item">
+                                <label for="cropMode">Crop Mode (动态裁剪)</label>
+                                <select id="cropMode">
+                                    <option value="true" selected>启用 (推荐)</option>
+                                    <option value="false">禁用</option>
+                                </select>
+                                <small style="color: #999;">启用后自动裁剪图像区域</small>
+                            </div>
+                            <div class="config-item">
+                                <label for="minCrops">Min Crops (最小裁剪数)</label>
+                                <input type="number" id="minCrops" value="2" min="1" max="9" step="1">
+                                <small style="color: #999;">最少裁剪块数量</small>
+                            </div>
+                            <div class="config-item">
+                                <label for="maxCrops">Max Crops (最大裁剪数)</label>
+                                <input type="number" id="maxCrops" value="6" min="1" max="12" step="1">
+                                <small style="color: #999;">最多裁剪块数量</small>
+                            </div>
+                            <div class="config-item">
+                                <label for="imageSize">Image Size (局部视图尺寸)</label>
+                                <input type="number" id="imageSize" value="768" min="256" max="1536" step="64">
+                                <small style="color: #999;">裁剪块的目标尺寸</small>
+                            </div>
+                            <div class="config-item">
+                                <label for="baseSize">Base Size (全局视图尺寸)</label>
+                                <input type="number" id="baseSize" value="1024" min="512" max="2048" step="64">
+                                <small style="color: #999;">全局缩略图的基准尺寸</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- PDF Processing Parameters -->
+                    <div style="margin-bottom: 15px;">
+                        <h4 style="color: #667eea; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px;">PDF处理参数 (PDF Processing)</h4>
+                        <div class="config-grid">
+                            <div class="config-item">
+                                <label for="dpi">PDF DPI (转换分辨率)</label>
+                                <input type="number" id="dpi" value="144" min="72" max="600" step="36">
+                                <small style="color: #999;">PDF转图像的DPI</small>
+                            </div>
+                            <div class="config-item">
+                                <label for="pageSeparator">Page Separator (页面分隔符)</label>
+                                <input type="text" id="pageSeparator" value="\n\n---\n\n">
+                                <small style="color: #999;">多页PDF的分隔符</small>
+                            </div>
+                            <div class="config-item">
+                                <label for="skipRepeatPages">Skip Repeat Pages (跳过重复页)</label>
+                                <select id="skipRepeatPages">
+                                    <option value="true" selected>启用</option>
+                                    <option value="false">禁用</option>
+                                </select>
+                                <small style="color: #999;">跳过重复/不完整页面</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Prompt -->
+                    <div style="margin-bottom: 15px;">
+                        <h4 style="color: #667eea; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px;">提示词 (Prompt)</h4>
+                        <div class="config-item">
+                            <label for="promptTemplate">快速选择模板</label>
+                            <select id="promptTemplate" onchange="applyPromptTemplate()">
+                                <option value="">-- 选择模板 --</option>
+                                <option value="document" selected>文档排版</option>
+                                <option value="ocr">图片OCR</option>
+                                <option value="nolayout">无布局OCR</option>
+                                <option value="figure">图表解析</option>
+                                <option value="describe">详细描述</option>
+                                <option value="locate">目标定位</option>
+                            </select>
+                        </div>
+                        <div class="config-item" style="margin-top: 10px;">
+                            <label for="prompt">自定义 Prompt</label>
+                            <textarea id="prompt" rows="4"><image>
 <|grounding|>Convert the document to markdown.</textarea>
-                        <small style="color: #666; margin-top: 5px;">
-                            常用提示词：
-                            <a href="#" onclick="setPrompt('document'); return false;">文档排版</a> |
-                            <a href="#" onclick="setPrompt('ocr'); return false;">图片OCR</a> |
-                            <a href="#" onclick="setPrompt('nolayout'); return false;">无布局OCR</a> |
-                            <a href="#" onclick="setPrompt('figure'); return false;">图表解析</a> |
-                            <a href="#" onclick="setPrompt('describe'); return false;">详细描述</a>
-                        </small>
+                            <small style="color: #666; margin-top: 5px;">
+                                快捷链接：
+                                <a href="#" onclick="setPrompt('document'); return false;">文档排版</a> |
+                                <a href="#" onclick="setPrompt('ocr'); return false;">图片OCR</a> |
+                                <a href="#" onclick="setPrompt('nolayout'); return false;">无布局OCR</a> |
+                                <a href="#" onclick="setPrompt('figure'); return false;">图表解析</a> |
+                                <a href="#" onclick="setPrompt('describe'); return false;">详细描述</a> |
+                                <a href="#" onclick="setPrompt('locate'); return false;">目标定位</a>
+                            </small>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -592,6 +684,100 @@
         const API_BASE = window.location.origin;
         let pollingInterval = null;
         let currentTasks = [];
+        let serverConfig = null;
+        let promptTemplates = {};
+        let presets = {};
+
+        // Load configuration from server
+        async function loadConfig() {
+            try {
+                const response = await fetch(`${API_BASE}/api/config`);
+                if (response.ok) {
+                    serverConfig = await response.json();
+                    promptTemplates = serverConfig.prompt_templates || {};
+                    presets = serverConfig.presets || {};
+                    applyConfigToForm(serverConfig);
+                    console.log('Configuration loaded:', serverConfig);
+                }
+            } catch (error) {
+                console.error('Failed to load config:', error);
+            }
+        }
+
+        // Apply server config to form fields
+        function applyConfigToForm(config) {
+            // Sampling parameters
+            if (config.sampling) {
+                document.getElementById('temperature').value = config.sampling.temperature ?? 0;
+                document.getElementById('maxTokens').value = config.sampling.max_tokens ?? 8192;
+                document.getElementById('ngramSize').value = config.sampling.ngram_size ?? 10;
+                document.getElementById('windowSize').value = config.sampling.window_size ?? 1024;
+            }
+
+            // Image processing parameters
+            if (config.image_processing) {
+                document.getElementById('cropMode').value = config.image_processing.crop_mode ? 'true' : 'false';
+                document.getElementById('minCrops').value = config.image_processing.min_crops ?? 2;
+                document.getElementById('maxCrops').value = config.image_processing.max_crops ?? 6;
+                document.getElementById('imageSize').value = config.image_processing.image_size ?? 768;
+                document.getElementById('baseSize').value = config.image_processing.base_size ?? 1024;
+            }
+
+            // PDF processing parameters
+            if (config.pdf_processing) {
+                document.getElementById('dpi').value = config.pdf_processing.pdf_dpi ?? 144;
+                document.getElementById('pageSeparator').value = config.pdf_processing.page_separator ?? '\n\n---\n\n';
+                document.getElementById('skipRepeatPages').value = config.pdf_processing.skip_repeat_pages ? 'true' : 'false';
+            }
+
+            // Prompt
+            if (config.prompt && config.prompt.default_prompt) {
+                document.getElementById('prompt').value = config.prompt.default_prompt;
+            }
+        }
+
+        // Apply preset configuration
+        function applyPreset(presetName) {
+            const preset = presets[presetName];
+            if (!preset) {
+                console.warn('Preset not found:', presetName);
+                return;
+            }
+
+            // Update form fields
+            if (preset.crop_mode !== undefined) {
+                document.getElementById('cropMode').value = preset.crop_mode ? 'true' : 'false';
+            }
+            if (preset.min_crops !== undefined) {
+                document.getElementById('minCrops').value = preset.min_crops;
+            }
+            if (preset.max_crops !== undefined) {
+                document.getElementById('maxCrops').value = preset.max_crops;
+            }
+            if (preset.image_size !== undefined) {
+                document.getElementById('imageSize').value = preset.image_size;
+            }
+            if (preset.base_size !== undefined) {
+                document.getElementById('baseSize').value = preset.base_size;
+            }
+
+            // Update active button
+            document.querySelectorAll('.preset-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            console.log('Applied preset:', presetName, preset);
+        }
+
+        // Apply prompt template
+        function applyPromptTemplate() {
+            const templateName = document.getElementById('promptTemplate').value;
+            if (!templateName) return;
+
+            const template = promptTemplates[templateName];
+            if (template && template.prompt) {
+                document.getElementById('prompt').value = template.prompt;
+            }
+        }
 
         // Load tasks from localStorage on startup
         function loadTasksFromStorage() {
@@ -664,19 +850,34 @@
                 ocr: '<image>\n<|grounding|>OCR this image.',
                 nolayout: '<image>\nFree OCR.',
                 figure: '<image>\nParse the figure.',
-                describe: '<image>\nDescribe this image in detail.'
+                describe: '<image>\nDescribe this image in detail.',
+                locate: '<image>\nLocate <|ref|>xxxx<|/ref|> in the image.'
             };
             if (prompts[type]) {
                 document.getElementById('prompt').value = prompts[type];
+                // Also update the dropdown
+                document.getElementById('promptTemplate').value = type;
             }
         }
 
         function getOCRConfig() {
             return {
-                crop_mode: document.getElementById('cropMode').value === 'true',
+                // Sampling parameters
                 temperature: parseFloat(document.getElementById('temperature').value),
                 max_tokens: parseInt(document.getElementById('maxTokens').value),
+                ngram_size: parseInt(document.getElementById('ngramSize').value),
+                window_size: parseInt(document.getElementById('windowSize').value),
+                // Image processing parameters
+                crop_mode: document.getElementById('cropMode').value === 'true',
+                min_crops: parseInt(document.getElementById('minCrops').value),
+                max_crops: parseInt(document.getElementById('maxCrops').value),
+                image_size: parseInt(document.getElementById('imageSize').value),
+                base_size: parseInt(document.getElementById('baseSize').value),
+                // PDF processing parameters
                 dpi: parseInt(document.getElementById('dpi').value),
+                page_separator: document.getElementById('pageSeparator').value,
+                skip_repeat_pages: document.getElementById('skipRepeatPages').value === 'true',
+                // Prompt
                 prompt: document.getElementById('prompt').value
             };
         }
@@ -685,7 +886,7 @@
             const formData = new FormData();
             formData.append('file', file);
 
-            // Add OCR configuration
+            // Add all OCR configuration parameters
             const config = getOCRConfig();
             for (const [key, value] of Object.entries(config)) {
                 formData.append(key, value);
@@ -921,6 +1122,7 @@
 
         // Initialize
         loadTasksFromStorage();
+        loadConfig();  // Load server configuration
         startPolling();
 
         // Stop polling when page is hidden
