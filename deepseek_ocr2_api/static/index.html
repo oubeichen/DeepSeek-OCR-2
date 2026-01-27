@@ -322,6 +322,14 @@
             margin-top: 20px;
         }
 
+        .config-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
         .config-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -383,13 +391,16 @@
             color: white;
         }
 
-        .toggle-config {
-            cursor: pointer;
+        .btn-config {
+            background: white;
             color: #667eea;
-            text-decoration: underline;
-            font-size: 0.9em;
-            margin-top: 10px;
-            display: inline-block;
+            border: 2px solid #667eea;
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.18);
+        }
+
+        .btn-config:hover {
+            background: #667eea;
+            color: white;
         }
 
         .config-content {
@@ -602,8 +613,15 @@
         }
 
         .btn-reset {
+            background: white;
+            color: #6c757d;
+            border: 2px solid #b2bec3;
+            box-shadow: 0 6px 16px rgba(178, 190, 195, 0.25);
+        }
+
+        .btn-reset:hover {
             background: #b2bec3;
-            color: #2d3436;
+            color: white;
         }
     </style>
 </head>
@@ -634,8 +652,8 @@
             </div>
 
             <div class="config-section">
-                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-                    <a class="toggle-config" onclick="toggleConfig()">⚙️ 高级配置</a>
+                <div class="config-actions">
+                    <button class="btn btn-small btn-config" type="button" onclick="toggleConfig()">⚙️ 高级配置</button>
                     <button class="btn btn-small btn-reset" type="button" id="clearFormBtn">清除本地配置</button>
                 </div>
                 <div class="config-content" id="configContent">
