@@ -1,10 +1,36 @@
-# DeepSeek-OCR-2 API Server 额外依赖
-# 基础依赖请先安装项目根目录的 requirements.txt
+# DeepSeek-OCR-2 API Server 完整依赖
+# 环境要求: cuda11.8 + python3.12.9
 
-# FastAPI 框架
+# PyTorch (cu118)
+torch==2.6.0
+torchvision==0.21.0
+torchaudio==2.6.0
+--index-url https://download.pytorch.org/whl/cu118
+
+# vLLM - 需要从 GitHub releases 下载 whl 安装
+# https://github.com/vllm-project/vllm/releases/tag/v0.8.5
+# pip install vllm-0.8.5+cu118-cp38-abi3-manylinux1_x86_64.whl
+
+# Flash Attention
+flash-attn==2.7.3
+
+# Transformers
+transformers==4.46.3
+tokenizers==0.20.3
+
+# 图像处理
+Pillow
+PyMuPDF
+img2pdf
+numpy
+
+# 其他依赖
+einops
+easydict
+addict
+
+# FastAPI
 fastapi
 uvicorn[standard]
 python-multipart
-
-# 配置管理
 pydantic-settings

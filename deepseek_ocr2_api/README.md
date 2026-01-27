@@ -4,98 +4,77 @@
 
 ## 特性
 
-- **单例模式引擎管理**：模型只加载一次，后续请求复用
-- **同步/异步模式**：支持 vLLM 的 LLM 和 AsyncLLMEngine
-- **统一配置管理**：支持 .env 文件、环境变量和命令行参数，优先级清晰
-- **多种输入格式**：支持 PNG、JPG、JPEG、WebP、BMP、TIFF、GIF 图片和 PDF
-- **丰富的输出**：Markdown 文本、标注图片、提取的图片区域、JSON 元数据
-- **OpenAPI 文档**：完整的 Swagger UI 和 ReDoc 文档
+- 单例模式引擎管理：模型只加载一次，后续请求复用
+- 同步/异步模式：支持 vLLM 的 LLM 和 AsyncLLMEngine
+- 统一配置管理：支持 .env 文件、环境变量和命令行参数
+- 多种输入格式：支持 PNG、JPG、JPEG、WebP、BMP、TIFF、GIF 图片和 PDF
+- 丰富的输出：Markdown 文本、标注图片、提取的图片区域、JSON 元数据
+- OpenAPI 文档：完整的 Swagger UI 和 ReDoc 文档
 
-## 配置优先级
+## 环境要求
 
-配置从以下来源加载（优先级从高到低）：
-
-1. **命令行参数** - 最高优先级，用于临时覆盖
-2. **环境变量** - `DEEPSEEK_OCR_*` 前缀
-3. **.env 文件** - 项目根目录的 `.env` 文件
-4. **默认值** - `config.py` 中定义的默认值
+- CUDA 11.8
+- Python 3.12.9
 
 ## 安装
 
 ```bash
-# 1. 先按照项目根目录 README.md 安装基础环境
-# 包括 torch、vllm-0.8.5 whl、flash-attn 等
-pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu118
-pip install vllm-0.8.5+cu118-cp38-abi3-manylinux1_x86_64.whl  # 从 GitHub releases 下载
-pip install -r requirements.txt
-pip install flash-attn==2.7.3 --no-build-isolation
+# 1. 创建 conda 环境
+conda create -n deepseek-ocr2 python=3.12.9 -y
+conda activate deepseek-ocr2
 
-# 2. 安装 API 服务额外依赖
+# 2. 下载 vLLM whl
+# 从 https://github.com/vllm-project/vllm/releases/tag/v0.8.5 下载
+# vllm-0.8.5+cu118-cp38-abi3-manylinux1_x86_64.whl
+
+# 3. 安装依赖
 pip install -r deepseek_ocr2_api/requirements.txt
+pip install vllm-0.8.5+cu118-cp38-abi3-manylinux1_x86_64.whl
+pip install flash-attn==2.7.3 --no-build-isolation
 ```
 
-## 快速开始
+## 配置
 
-### 推荐方式：使用 .env 文件
+配置优先级（从高到低）：
+1. 命令行参数
+2. 环境变量 (`DEEPSEEK_OCR_*`)
+3. .env 文件
+4. 默认值
+
+### 使用 .env 文件配置
 
 ```bash
-# 1. 复制示例配置文件
 cp deepseek_ocr2_api/.env.example .env
-
-# 2. 编辑 .env 文件，修改需要的配置
 vim .env
-
-# 3. 启动服务
-./deepseek_ocr2_api/scripts/start.sh
 ```
 
-### 使用启动脚本
+### 主要配置项
+
+| 环境变量 | 默认值 | 描述 |
+|----------|--------|------|
+| `DEEPSEEK_OCR_MODEL_PATH` | `deepseek-ai/DeepSeek-OCR2-Pro` | 模型路径 |
+| `DEEPSEEK_OCR_GPU_MEMORY_UTILIZATION` | `0.9` | GPU 内存使用率 |
+| `DEEPSEEK_OCR_TENSOR_PARALLEL_SIZE` | `1` | 张量并行大小 |
+| `DEEPSEEK_OCR_HOST` | `0.0.0.0` | 服务地址 |
+| `DEEPSEEK_OCR_PORT` | `8000` | 服务端口 |
+| `DEEPSEEK_OCR_ENGINE_MODE` | `sync` | 引擎模式 (sync/async) |
+
+完整配置项见 `.env.example`。
+
+## 启动
 
 ```bash
-# 基本启动（自动加载 .env）
+# 使用 .env 配置启动
 ./deepseek_ocr2_api/scripts/start.sh
 
-# 临时覆盖某些配置
+# 临时覆盖配置
 ./deepseek_ocr2_api/scripts/start.sh --gpu-memory-utilization 0.8 --port 8080
 
-# 使用自定义 .env 文件
-./deepseek_ocr2_api/scripts/start.sh --env-file /path/to/custom.env
-
-# 查看所有选项
-./deepseek_ocr2_api/scripts/start.sh --help
-```
-
-### 使用 Python 模块
-
-```bash
-# 基本启动（自动加载 .env）
+# 使用 Python 模块启动
 python -m deepseek_ocr2_api
-
-# 临时覆盖参数
-python -m deepseek_ocr2_api --gpu-memory-utilization 0.8 --port 8080
 ```
-
-### .env 文件示例
-
-```env
-# 模型配置
-DEEPSEEK_OCR_MODEL_PATH=deepseek-ai/DeepSeek-OCR2-Pro
-
-# GPU 配置
-DEEPSEEK_OCR_GPU_MEMORY_UTILIZATION=0.9
-DEEPSEEK_OCR_TENSOR_PARALLEL_SIZE=1
-DEEPSEEK_OCR_CUDA_VISIBLE_DEVICES=0
-
-# 服务器配置
-DEEPSEEK_OCR_HOST=0.0.0.0
-DEEPSEEK_OCR_PORT=8000
-```
-
-完整配置选项请参考 `deepseek_ocr2_api/.env.example`。
 
 ## API 端点
-
-### OCR 端点
 
 | 端点 | 方法 | 描述 |
 |------|------|------|
@@ -103,22 +82,11 @@ DEEPSEEK_OCR_PORT=8000
 | `/api/v1/ocr/image/json` | POST | 单张图片 OCR，返回 JSON |
 | `/api/v1/ocr/pdf` | POST | PDF 文档 OCR，返回 ZIP |
 | `/api/v1/ocr/batch` | POST | 批量图片 OCR，返回 ZIP |
-
-### 健康检查端点
-
-| 端点 | 方法 | 描述 |
-|------|------|------|
 | `/api/v1/health` | GET | 健康检查 |
 | `/api/v1/config` | GET | 当前配置 |
 | `/api/v1/engine/status` | GET | 引擎状态 |
-
-### 文档端点
-
-| 端点 | 描述 |
-|------|------|
-| `/docs` | Swagger UI |
-| `/redoc` | ReDoc |
-| `/openapi.json` | OpenAPI Schema |
+| `/docs` | GET | Swagger UI |
+| `/redoc` | GET | ReDoc |
 
 ## 使用示例
 
@@ -128,19 +96,16 @@ DEEPSEEK_OCR_PORT=8000
 # 单张图片 OCR
 curl -X POST "http://localhost:8000/api/v1/ocr/image" \
   -F "file=@image.png" \
-  -F "prompt=OCR with format" \
   -o result.zip
 
 # PDF OCR
 curl -X POST "http://localhost:8000/api/v1/ocr/pdf" \
   -F "file=@document.pdf" \
-  -F "dpi=200" \
   -o result.zip
 
 # JSON 响应
 curl -X POST "http://localhost:8000/api/v1/ocr/image/json" \
-  -F "file=@image.png" \
-  | jq .
+  -F "file=@image.png"
 ```
 
 ### Python
@@ -152,8 +117,7 @@ import requests
 with open("image.png", "rb") as f:
     response = requests.post(
         "http://localhost:8000/api/v1/ocr/image",
-        files={"file": f},
-        data={"prompt": "OCR with format"}
+        files={"file": f}
     )
     with open("result.zip", "wb") as out:
         out.write(response.content)
@@ -164,44 +128,8 @@ with open("image.png", "rb") as f:
         "http://localhost:8000/api/v1/ocr/image/json",
         files={"file": f}
     )
-    result = response.json()
-    print(result["results"][0]["markdown"])
+    print(response.json()["results"][0]["markdown"])
 ```
-
-## 配置参数
-
-### 模型配置
-
-| 参数 | 环境变量 | 默认值 | 描述 |
-|------|----------|--------|------|
-| `--model-path` | `DEEPSEEK_OCR_MODEL_PATH` | `deepseek-ai/DeepSeek-OCR2-Pro` | 模型路径 |
-| `--dtype` | `DEEPSEEK_OCR_DTYPE` | `bfloat16` | 模型数据类型 |
-| `--trust-remote-code` | `DEEPSEEK_OCR_TRUST_REMOTE_CODE` | `true` | 信任远程代码 |
-
-### GPU 配置
-
-| 参数 | 环境变量 | 默认值 | 描述 |
-|------|----------|--------|------|
-| `--gpu-memory-utilization` | `DEEPSEEK_OCR_GPU_MEMORY_UTILIZATION` | `0.9` | GPU 内存使用率 |
-| `--tensor-parallel-size` | `DEEPSEEK_OCR_TENSOR_PARALLEL_SIZE` | `1` | 张量并行大小 |
-| `--max-model-len` | `DEEPSEEK_OCR_MAX_MODEL_LEN` | `16384` | 最大模型长度 |
-
-### 采样配置
-
-| 参数 | 环境变量 | 默认值 | 描述 |
-|------|----------|--------|------|
-| `--temperature` | `DEEPSEEK_OCR_TEMPERATURE` | `0.0` | 采样温度 |
-| `--max-tokens` | `DEEPSEEK_OCR_MAX_TOKENS` | `8192` | 最大生成 token 数 |
-| `--ngram-size` | `DEEPSEEK_OCR_NGRAM_SIZE` | `20` | N-gram 重复惩罚大小 |
-| `--window-size` | `DEEPSEEK_OCR_WINDOW_SIZE` | `100` | N-gram 检查窗口大小 |
-
-### 服务器配置
-
-| 参数 | 环境变量 | 默认值 | 描述 |
-|------|----------|--------|------|
-| `--host` | `DEEPSEEK_OCR_HOST` | `0.0.0.0` | 监听地址 |
-| `--port` | `DEEPSEEK_OCR_PORT` | `8000` | 监听端口 |
-| `--mode` | `DEEPSEEK_OCR_ENGINE_MODE` | `sync` | 引擎模式 (sync/async) |
 
 ## 输出格式
 
@@ -209,31 +137,26 @@ with open("image.png", "rb") as f:
 
 ```
 result.zip
-├── output.md           # 合并的 Markdown 文本
+├── output.md           # Markdown 文本
 ├── metadata.json       # 处理元数据
-├── annotated_0.jpg     # 标注后的图片
-├── annotated.pdf       # 标注后的 PDF (仅 PDF 输入)
-└── images/             # 提取的图片区域
+├── annotated_0.jpg     # 标注图片
+├── annotated.pdf       # 标注 PDF (仅 PDF 输入)
+└── images/             # 提取的图片
     ├── 0_0.jpg
-    ├── 0_1.jpg
     └── ...
 ```
 
-### JSON 响应格式
+### JSON 响应
 
 ```json
 {
   "success": true,
-  "message": "OCR completed successfully",
   "request_id": "img_abc123",
   "processing_time": 2.5,
   "results": [
     {
       "page_index": 0,
-      "markdown": "# Title\n\nContent...",
-      "raw_output": null,
-      "extracted_images": [],
-      "annotated_image": null
+      "markdown": "# Title\n\nContent..."
     }
   ],
   "total_pages": 1
@@ -244,36 +167,27 @@ result.zip
 
 ```
 deepseek_ocr2_api/
-├── __init__.py
-├── __main__.py          # CLI 入口
-├── main.py              # FastAPI 应用
 ├── config.py            # 配置管理
+├── main.py              # FastAPI 应用
+├── __main__.py          # CLI 入口
 ├── engine/
-│   ├── __init__.py
 │   ├── manager.py       # 单例引擎管理器
 │   └── inference.py     # 推理接口
 ├── processors/
-│   ├── __init__.py
 │   ├── image.py         # 图片处理
 │   ├── pdf.py           # PDF 处理
 │   └── postprocess.py   # 后处理
 ├── routers/
-│   ├── __init__.py
 │   ├── ocr.py           # OCR 路由
 │   └── health.py        # 健康检查路由
 ├── schemas/
-│   ├── __init__.py
 │   ├── request.py       # 请求模型
 │   └── response.py      # 响应模型
 ├── utils/
-│   ├── __init__.py
 │   └── packaging.py     # 打包工具
 ├── scripts/
 │   └── start.sh         # 启动脚本
 ├── requirements.txt     # 依赖
-└── README.md            # 文档
+├── .env.example         # 配置示例
+└── README.md
 ```
-
-## 许可证
-
-本项目基于 DeepSeek-OCR-2 模型，请遵循相应的许可证条款。
