@@ -52,7 +52,7 @@ class Settings(BaseSettings):
         description="CUDA visible devices (e.g., '0', '0,1', '0,1,2,3')"
     )
     gpu_memory_utilization: float = Field(
-        default=0.8,
+        default=0.9,
         ge=0.1,
         le=1.0,
         description="GPU memory utilization ratio (0.1-1.0)"
@@ -90,7 +90,7 @@ class Settings(BaseSettings):
         description="Whether to enforce eager mode (disable CUDA graphs)"
     )
     disable_mm_preprocessor_cache: bool = Field(
-        default=False,
+        default=True,
         description="Whether to disable multimodal preprocessor cache"
     )
 

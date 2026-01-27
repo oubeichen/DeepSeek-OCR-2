@@ -69,7 +69,7 @@ def parse_args():
     gpu_group.add_argument(
         "--gpu-memory-utilization",
         type=float,
-        default=0.8,
+        default=0.9,
         help="GPU memory utilization ratio (0.1-1.0)",
     )
     gpu_group.add_argument(
