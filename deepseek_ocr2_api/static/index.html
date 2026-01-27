@@ -635,9 +635,9 @@
                     <div style="margin-bottom: 15px;">
                         <label style="font-weight: bold; display: block; margin-bottom: 8px;">快速预设</label>
                         <div class="preset-buttons">
-                            <button type="button" class="preset-btn" onclick="applyPreset('fast')">🚀 快速模式</button>
-                            <button type="button" class="preset-btn active" onclick="applyPreset('standard')">⚖️ 标准模式</button>
-                            <button type="button" class="preset-btn" onclick="applyPreset('quality')">✨ 高质量模式</button>
+                            <button type="button" class="preset-btn" data-preset="fast" onclick="applyPreset('fast')">🚀 快速模式</button>
+                            <button type="button" class="preset-btn active" data-preset="standard" onclick="applyPreset('standard')">⚖️ 标准模式</button>
+                            <button type="button" class="preset-btn" data-preset="quality" onclick="applyPreset('quality')">✨ 高质量模式</button>
                         </div>
                     </div>
 
@@ -834,6 +834,7 @@
         let previewRequestToken = 0;
         let previewRawMode = false;
         let lastPreviewMarkdown = '';
+        const FORM_STATE_KEY = 'ocrFormState';
 
         // Load configuration from server
         async function loadConfig() {
@@ -844,10 +845,12 @@
                     promptTemplates = serverConfig.prompt_templates || {};
                     presets = serverConfig.presets || {};
                     applyConfigToForm(serverConfig);
+                    applyStoredFormState();
                     console.log('Configuration loaded:', serverConfig);
                 }
             } catch (error) {
                 console.error('Failed to load config:', error);
+                applyStoredFormState();
             }
         }
 
@@ -913,6 +916,7 @@
             event.target.classList.add('active');
 
             console.log('Applied preset:', presetName, preset);
+            saveFormState();
         }
 
         // Apply prompt template
@@ -923,6 +927,83 @@
             const template = promptTemplates[templateName];
             if (template && template.prompt) {
                 document.getElementById('prompt').value = template.prompt;
+            }
+            saveFormState();
+        }
+
+        function collectFormState() {
+            const activePreset = document.querySelector('.preset-btn.active');
+            return {
+                sampling: {
+                    temperature: document.getElementById('temperature').value,
+                    max_tokens: document.getElementById('maxTokens').value,
+                    ngram_size: document.getElementById('ngramSize').value,
+                    window_size: document.getElementById('windowSize').value
+                },
+                image_processing: {
+                    crop_mode: document.getElementById('cropMode').value,
+                    min_crops: document.getElementById('minCrops').value,
+                    max_crops: document.getElementById('maxCrops').value,
+                    image_size: document.getElementById('imageSize').value,
+                    base_size: document.getElementById('baseSize').value
+                },
+                pdf_processing: {
+                    pdf_dpi: document.getElementById('dpi').value,
+                    page_separator: document.getElementById('pageSeparator').value,
+                    skip_repeat_pages: document.getElementById('skipRepeatPages').value
+                },
+                prompt: document.getElementById('prompt').value,
+                promptTemplate: document.getElementById('promptTemplate').value,
+                preset: activePreset ? activePreset.dataset.preset : ''
+            };
+        }
+
+        function saveFormState() {
+            try {
+                localStorage.setItem(FORM_STATE_KEY, JSON.stringify(collectFormState()));
+            } catch (error) {
+                console.warn('Failed to save form state:', error);
+            }
+        }
+
+        function applyStoredFormState() {
+            const stored = localStorage.getItem(FORM_STATE_KEY);
+            if (!stored) {
+                return;
+            }
+            try {
+                const state = JSON.parse(stored);
+                if (state.sampling) {
+                    if (state.sampling.temperature !== undefined) document.getElementById('temperature').value = state.sampling.temperature;
+                    if (state.sampling.max_tokens !== undefined) document.getElementById('maxTokens').value = state.sampling.max_tokens;
+                    if (state.sampling.ngram_size !== undefined) document.getElementById('ngramSize').value = state.sampling.ngram_size;
+                    if (state.sampling.window_size !== undefined) document.getElementById('windowSize').value = state.sampling.window_size;
+                }
+                if (state.image_processing) {
+                    if (state.image_processing.crop_mode !== undefined) document.getElementById('cropMode').value = state.image_processing.crop_mode;
+                    if (state.image_processing.min_crops !== undefined) document.getElementById('minCrops').value = state.image_processing.min_crops;
+                    if (state.image_processing.max_crops !== undefined) document.getElementById('maxCrops').value = state.image_processing.max_crops;
+                    if (state.image_processing.image_size !== undefined) document.getElementById('imageSize').value = state.image_processing.image_size;
+                    if (state.image_processing.base_size !== undefined) document.getElementById('baseSize').value = state.image_processing.base_size;
+                }
+                if (state.pdf_processing) {
+                    if (state.pdf_processing.pdf_dpi !== undefined) document.getElementById('dpi').value = state.pdf_processing.pdf_dpi;
+                    if (state.pdf_processing.page_separator !== undefined) document.getElementById('pageSeparator').value = state.pdf_processing.page_separator;
+                    if (state.pdf_processing.skip_repeat_pages !== undefined) document.getElementById('skipRepeatPages').value = state.pdf_processing.skip_repeat_pages;
+                }
+                if (state.prompt !== undefined) {
+                    document.getElementById('prompt').value = state.prompt;
+                }
+                if (state.promptTemplate !== undefined) {
+                    document.getElementById('promptTemplate').value = state.promptTemplate;
+                }
+                if (state.preset) {
+                    document.querySelectorAll('.preset-btn').forEach(btn => {
+                        btn.classList.toggle('active', btn.dataset.preset === state.preset);
+                    });
+                }
+            } catch (error) {
+                console.warn('Failed to apply stored form state:', error);
             }
         }
 
@@ -1007,6 +1088,17 @@
             if (currentUploadXhr) {
                 currentUploadXhr.abort();
             }
+        });
+
+        [
+            'temperature', 'maxTokens', 'ngramSize', 'windowSize',
+            'cropMode', 'minCrops', 'maxCrops', 'imageSize', 'baseSize',
+            'dpi', 'pageSeparator', 'skipRepeatPages', 'prompt', 'promptTemplate'
+        ].forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('input', saveFormState);
+            el.addEventListener('change', saveFormState);
         });
 
         document.getElementById('toggleRawBtn').addEventListener('click', () => {
