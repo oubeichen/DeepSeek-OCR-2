@@ -12,6 +12,7 @@ from typing import List, Optional
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse, StreamingResponse
+from PIL import Image as PILImage
 
 from ..config import get_settings
 from ..engine.manager import EngineManager
@@ -23,7 +24,12 @@ from ..engine.inference import (
 )
 from ..processors.image import load_image_from_upload, get_image_info
 from ..processors.pdf import pdf_to_images_from_upload, images_to_pdf
-from ..processors.postprocess import process_output
+from ..processors.postprocess import (
+    process_output,
+    extract_refs,
+    clean_output,
+    replace_image_refs,
+)
 from ..utils.packaging import (
     create_result_package,
     create_pdf_result_package,
@@ -328,7 +334,6 @@ async def ocr_pdf(
 
             # Collect annotated images for PDF
             if result.get("annotated_image_path"):
-                from PIL import Image as PILImage
                 annotated_images.append(PILImage.open(result["annotated_image_path"]))
 
         # Generate annotated PDF
@@ -600,8 +605,6 @@ async def ocr_image_json(
         output_text = outputs[0] if outputs else ""
 
         # Simple post-processing (no file saving)
-        from ..processors.postprocess import extract_refs, clean_output, replace_image_refs
-
         refs, image_refs, other_refs = extract_refs(output_text)
         markdown = replace_image_refs(output_text, image_refs, "images", 0)
         markdown = clean_output(markdown, other_refs)

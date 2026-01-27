@@ -11,9 +11,12 @@ from typing import Optional, List, Dict, Any, Union, AsyncGenerator
 from vllm import SamplingParams
 
 from ..config import Settings, get_settings
-from .manager import EngineManager
+from .manager import EngineManager  # This import sets up VLLM_DIR in sys.path
 
 logger = logging.getLogger(__name__)
+
+# Import from DeepSeek-OCR2-vllm (path already set by manager.py)
+from process.ngram_norepeat import NoRepeatNGramLogitsProcessor
 
 
 def create_sampling_params(
@@ -42,16 +45,6 @@ def create_sampling_params(
     Returns:
         Configured SamplingParams instance.
     """
-    # Import here to avoid circular imports
-    import sys
-    import os
-    VLLM_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
-                            "DeepSeek-OCR2-master", "DeepSeek-OCR2-vllm")
-    if VLLM_DIR not in sys.path:
-        sys.path.insert(0, VLLM_DIR)
-
-    from process.ngram_norepeat import NoRepeatNGramLogitsProcessor
-
     settings = settings or get_settings()
 
     # Use provided values or fall back to settings
