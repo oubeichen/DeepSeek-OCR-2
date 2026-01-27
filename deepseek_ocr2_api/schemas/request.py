@@ -17,7 +17,7 @@ class OCRRequest(BaseModel):
 
     prompt: Optional[str] = Field(
         default=None,
-        description="Custom prompt for OCR. If not provided, uses default: '<image>\\n<|grounding|>Convert the document to markdown.'"
+        description="Custom prompt for OCR. If not provided, uses default: '<image>\n<|grounding|>Convert the document to markdown.'"
     )
 
     # Sampling parameters
@@ -112,7 +112,7 @@ class PDFOCRRequest(OCRRequest):
     )
     page_separator: Optional[str] = Field(
         default=None,
-        description="Separator between pages in output. Default: '\\n<--- Page Split --->\\n'"
+        description="Separator between pages in output. Default: '\n<--- Page Split --->\n'"
     )
     skip_repeat_pages: Optional[bool] = Field(
         default=None,
