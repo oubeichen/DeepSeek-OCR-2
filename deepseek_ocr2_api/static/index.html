@@ -1009,6 +1009,12 @@
                     </div>
                 `;
             }).join('');
+
+            requestAnimationFrame(() => {
+                document.querySelectorAll('.task-logs').forEach(logEl => {
+                    logEl.scrollTop = logEl.scrollHeight;
+                });
+            });
         }
 
         async function downloadResult(taskId) {
