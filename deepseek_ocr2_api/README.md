@@ -23,8 +23,12 @@
 ## 安装
 
 ```bash
-# 1. 先安装项目基础依赖（参考项目根目录 README.md）
+# 1. 先按照项目根目录 README.md 安装基础环境
+# 包括 torch、vllm-0.8.5 whl、flash-attn 等
+pip install torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0 --index-url https://download.pytorch.org/whl/cu118
+pip install vllm-0.8.5+cu118-cp38-abi3-manylinux1_x86_64.whl  # 从 GitHub releases 下载
 pip install -r requirements.txt
+pip install flash-attn==2.7.3 --no-build-isolation
 
 # 2. 安装 API 服务额外依赖
 pip install -r deepseek_ocr2_api/requirements.txt
