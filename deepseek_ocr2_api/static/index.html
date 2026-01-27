@@ -1068,9 +1068,18 @@
             if (!markdownText) {
                 return '';
             }
-            return markdownText
+            let text = markdownText
                 .replace(/\\\[((?:.|\n)*?)\\\]/g, '$$\n$1\n$$')
-                .replace(/\\\(([^\\n]+?)\\\)/g, '$$$1$$');
+                .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
+
+            const lines = text.split(/\r?\n/);
+            const normalizedLines = lines.map((line) => {
+                if (/^\s*\$\$?\s*$/.test(line)) {
+                    return '$$';
+                }
+                return line;
+            });
+            return normalizedLines.join('\n');
         }
 
         function renderMarkdown(markdownText) {
