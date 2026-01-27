@@ -961,7 +961,7 @@
                     'failed': '失败'
                 }[task.status];
 
-                const logs = task.logs.slice(-5).map(log => `
+                const logs = task.logs.map(log => `
                     <div class="log-entry">
                         <span class="log-timestamp">${new Date(log.timestamp).toLocaleTimeString()}</span>
                         <span>${log.message}</span>
