@@ -216,6 +216,12 @@ class Settings(BaseSettings):
         le=32,
         description="Number of concurrent task workers for queue processing (share single GPU engine)"
     )
+    max_concurrent_inferences: int = Field(
+        default=4,
+        ge=1,
+        le=64,
+        description="Maximum concurrent inference requests to vLLM (controls fair scheduling between tasks)"
+    )
 
     # =================
     # Output Settings
