@@ -4,7 +4,7 @@
 #
 # Configuration priority (highest to lowest):
 #   1. Command line arguments
-#   2. Environment variables (DEEPSEEK_OCR_*)
+#   2. Environment variables (DEEPSEEK_OCR2_*)
 #   3. .env file
 #   4. Default values in config.py
 #
@@ -45,7 +45,7 @@ Usage: ./start.sh [options]
 
 Configuration is loaded from (highest priority first):
   1. Command line arguments (passed to this script)
-  2. Environment variables (DEEPSEEK_OCR_*)
+  2. Environment variables (DEEPSEEK_OCR2_*)
   3. .env file (default: project root, or specify with --env-file)
   4. Default values in config.py
 
@@ -65,12 +65,12 @@ Common Options:
   --mode MODE                    Engine mode: sync or async
   --reload                       Enable auto-reload for development
 
-Environment Variables (prefix: DEEPSEEK_OCR_):
-  DEEPSEEK_OCR_MODEL_PATH
-  DEEPSEEK_OCR_GPU_MEMORY_UTILIZATION
-  DEEPSEEK_OCR_TENSOR_PARALLEL_SIZE
-  DEEPSEEK_OCR_HOST
-  DEEPSEEK_OCR_PORT
+Environment Variables (prefix: DEEPSEEK_OCR2_):
+  DEEPSEEK_OCR2_MODEL_PATH
+  DEEPSEEK_OCR2_GPU_MEMORY_UTILIZATION
+  DEEPSEEK_OCR2_TENSOR_PARALLEL_SIZE
+  DEEPSEEK_OCR2_HOST
+  DEEPSEEK_OCR2_PORT
   ... (see config.py for full list)
 
 Examples:
@@ -186,30 +186,42 @@ fi
 if [ -f "$ENV_FILE" ]; then
     echo "Loading configuration from: $ENV_FILE"
     # Export variables from .env only if not already set
-    set -a
-    while IFS='=' read -r key value || [ -n "$key" ]; do
+    while IFS= read -r line || [ -n "$line" ]; do
         # Skip comments and empty lines
-        [[ "$key" =~ ^#.*$ ]] && continue
-        [[ -z "$key" ]] && continue
-        # Remove quotes from value
-        value="${value%\"}"
-        value="${value#\"}"
-        value="${value%\'}"
-        value="${value#\'}"
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+
+        # Split on first = sign
+        key="${line%%=*}"
+        value="${line#*=}"
+
+        # Trim whitespace from key
+        key="${key#"${key%%[![:space:]]*}"}"
+        key="${key%"${key##*[![:space:]]}"}"
+
+        # Skip if key is empty or contains spaces
+        [[ -z "$key" || "$key" =~ [[:space:]] ]] && continue
+
+        # Remove surrounding quotes from value (single or double)
+        if [[ "$value" =~ ^\"(.*)\"$ ]]; then
+            value="${BASH_REMATCH[1]}"
+        elif [[ "$value" =~ ^\'(.*)\'$ ]]; then
+            value="${BASH_REMATCH[1]}"
+        fi
+
         # Only set if not already in environment
-        if [ -z "${!key}" ]; then
+        if [ -z "${!key+x}" ]; then
             export "$key=$value"
         fi
     done < "$ENV_FILE"
-    set +a
 fi
 
 # Set required environment variables for vLLM
 export VLLM_USE_V1=0
 
 # Set CUDA_VISIBLE_DEVICES if specified in env
-if [ -n "$DEEPSEEK_OCR_CUDA_VISIBLE_DEVICES" ]; then
-    export CUDA_VISIBLE_DEVICES="$DEEPSEEK_OCR_CUDA_VISIBLE_DEVICES"
+if [ -n "$DEEPSEEK_OCR2_CUDA_VISIBLE_DEVICES" ]; then
+    export CUDA_VISIBLE_DEVICES="$DEEPSEEK_OCR2_CUDA_VISIBLE_DEVICES"
 fi
 
 # Print startup banner
