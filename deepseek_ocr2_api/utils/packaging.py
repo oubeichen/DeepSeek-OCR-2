@@ -22,6 +22,7 @@ def create_result_package(
     output_dir: str,
     package_name: Optional[str] = None,
     include_metadata: bool = True,
+    include_raw_output: bool = False,
 ) -> str:
     """
     Create a ZIP package containing all OCR results.
@@ -31,6 +32,7 @@ def create_result_package(
         output_dir: Directory containing result files.
         package_name: Optional name for the ZIP file.
         include_metadata: Whether to include metadata JSON.
+        include_raw_output: Whether to include raw model output in document.json.
 
     Returns:
         Path to the created ZIP file.
@@ -85,13 +87,14 @@ def create_result_package(
             # Build page data for document.json
             page_data = {
                 "page_index": idx,
-                "markdown": markdown_content,
-                "raw_output": raw_output,
                 "annotated_image": annotated_arcname,
                 "extracted_images": extracted_arcnames,
                 "elements": result.get("elements", []),
                 "image_info": result.get("image_info", {}),
             }
+            # Only include raw_output if requested
+            if include_raw_output and raw_output:
+                page_data["raw_output"] = raw_output
             document_data["pages"].append(page_data)
 
         # Add combined markdown
@@ -145,6 +148,7 @@ def create_pdf_result_package(
     annotated_pdf_path: Optional[str] = None,
     original_filename: str = "document",
     page_separator: str = "\n<--- Page Split --->\n",
+    include_raw_output: bool = False,
 ) -> str:
     """
     Create a ZIP package for PDF OCR results.
@@ -155,6 +159,7 @@ def create_pdf_result_package(
         annotated_pdf_path: Path to annotated PDF if generated.
         original_filename: Original PDF filename (without extension).
         page_separator: Separator between pages.
+        include_raw_output: Whether to include raw model output in document.json.
 
     Returns:
         Path to the created ZIP file.
@@ -168,7 +173,6 @@ def create_pdf_result_package(
         "created_at": datetime.now().isoformat(),
         "original_filename": original_filename,
         "total_pages": len(results),
-        "page_separator": page_separator,
         "annotated_pdf": f"{original_filename}_annotated.pdf" if annotated_pdf_path else None,
         "pages": [],
     }
@@ -203,13 +207,14 @@ def create_pdf_result_package(
             # Build page data for document.json
             page_data = {
                 "page_index": idx,
-                "markdown": markdown,
-                "raw_output": raw,
                 "annotated_image": annotated_arcname,
                 "extracted_images": extracted_arcnames,
                 "elements": result.get("elements", []),
                 "image_info": result.get("image_info", {}),
             }
+            # Only include raw_output if requested
+            if include_raw_output and raw:
+                page_data["raw_output"] = raw
             document_data["pages"].append(page_data)
 
         # Combined markdown

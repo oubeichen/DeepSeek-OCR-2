@@ -177,6 +177,7 @@ async def ocr_image(
             results=[result],
             output_dir=temp_dir,
             package_name=request_id,
+            include_raw_output=return_raw_output,
         )
 
         processing_time = time.time() - start_time
@@ -352,6 +353,7 @@ async def ocr_pdf(
             annotated_pdf_path=annotated_pdf_path,
             original_filename=original_name,
             page_separator=_page_sep,
+            include_raw_output=return_raw_output,
         )
 
         processing_time = time.time() - start_time
@@ -506,6 +508,7 @@ async def ocr_batch(
             results=results,
             output_dir=temp_dir,
             package_name=request_id,
+            include_raw_output=return_raw_output,
         )
 
         processing_time = time.time() - start_time

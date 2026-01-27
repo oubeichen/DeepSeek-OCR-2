@@ -23,6 +23,75 @@ class RefMatch:
     full_match: str
     label_type: str
     coordinates: List[List[int]]
+    text_content: str = ""  # The text content following this reference
+
+
+def extract_refs_with_content(text: str) -> Tuple[List[RefMatch], List[str], List[str]]:
+    """
+    Extract reference tags from model output along with their associated text content.
+
+    Pattern: <|ref|>label<|/ref|><|det|>coordinates<|/det|>text content...
+
+    The text content is the text that follows each reference tag until the next
+    reference tag or end of text.
+
+    Args:
+        text: Model output text.
+
+    Returns:
+        Tuple of:
+            - List of RefMatch objects (with text_content populated)
+            - List of image reference strings
+            - List of other reference strings
+    """
+    # Pattern to match ref tags with their coordinates
+    tag_pattern = r'<\|ref\|>(.*?)<\|/ref\|><\|det\|>(.*?)<\|/det\|>'
+
+    ref_matches = []
+    image_refs = []
+    other_refs = []
+
+    # Find all matches with their positions
+    matches = list(re.finditer(tag_pattern, text, re.DOTALL))
+
+    for i, match in enumerate(matches):
+        full_match = match.group(0)
+        label_type = match.group(1)
+        coords_str = match.group(2)
+
+        # Parse coordinates
+        try:
+            coords = eval(coords_str)
+            if not isinstance(coords, list):
+                coords = [coords]
+        except Exception as e:
+            logger.warning(f"Failed to parse coordinates: {e}")
+            coords = []
+
+        # Extract text content: from end of this match to start of next match (or end of text)
+        content_start = match.end()
+        if i + 1 < len(matches):
+            content_end = matches[i + 1].start()
+        else:
+            content_end = len(text)
+
+        text_content = text[content_start:content_end].strip()
+
+        ref_match = RefMatch(
+            full_match=full_match,
+            label_type=label_type,
+            coordinates=coords,
+            text_content=text_content
+        )
+        ref_matches.append(ref_match)
+
+        # Categorize
+        if label_type == 'image':
+            image_refs.append(full_match)
+        else:
+            other_refs.append(full_match)
+
+    return ref_matches, image_refs, other_refs
 
 
 def extract_refs(text: str) -> Tuple[List[RefMatch], List[str], List[str]]:
@@ -40,39 +109,8 @@ def extract_refs(text: str) -> Tuple[List[RefMatch], List[str], List[str]]:
             - List of image reference strings
             - List of other reference strings
     """
-    pattern = r'(<\|ref\|>(.*?)<\|/ref\|><\|det\|>(.*?)<\|/det\|>)'
-    matches = re.findall(pattern, text, re.DOTALL)
-
-    ref_matches = []
-    image_refs = []
-    other_refs = []
-
-    for match in matches:
-        full_match, label_type, coords_str = match
-
-        # Parse coordinates
-        try:
-            coords = eval(coords_str)
-            if not isinstance(coords, list):
-                coords = [coords]
-        except Exception as e:
-            logger.warning(f"Failed to parse coordinates: {e}")
-            coords = []
-
-        ref_match = RefMatch(
-            full_match=full_match,
-            label_type=label_type,
-            coordinates=coords
-        )
-        ref_matches.append(ref_match)
-
-        # Categorize
-        if label_type == 'image':
-            image_refs.append(full_match)
-        else:
-            other_refs.append(full_match)
-
-    return ref_matches, image_refs, other_refs
+    # Use the new function that also extracts content
+    return extract_refs_with_content(text)
 
 
 def convert_coordinates(
@@ -288,19 +326,24 @@ def process_output(
     # Extract references
     refs, image_refs, other_refs = extract_refs(text)
 
-    # Build detailed elements list
+    # Build detailed elements list with text content
     elements = []
+    element_idx = 0
     for ref in refs:
         for coords in ref.coordinates:
             if len(coords) != 4:
                 continue
             # Convert to pixel coordinates
             x1, y1, x2, y2 = convert_coordinates(coords, image_width, image_height)
-            elements.append({
+            element = {
+                "id": element_idx,
                 "type": ref.label_type,
                 "bbox_normalized": coords,  # Original 0-999 coordinates
                 "bbox_pixels": [x1, y1, x2, y2],  # Pixel coordinates
-            })
+                "text": ref.text_content,  # The text content associated with this element
+            }
+            elements.append(element)
+            element_idx += 1
 
     # Draw boxes and extract images
     annotated_image = None
