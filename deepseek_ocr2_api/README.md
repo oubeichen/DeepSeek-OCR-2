@@ -6,10 +6,19 @@
 
 - **单例模式引擎管理**：模型只加载一次，后续请求复用
 - **同步/异步模式**：支持 vLLM 的 LLM 和 AsyncLLMEngine
-- **完整的参数配置**：支持环境变量、.env 文件和命令行参数
+- **统一配置管理**：支持 .env 文件、环境变量和命令行参数，优先级清晰
 - **多种输入格式**：支持 PNG、JPG、JPEG、WebP、BMP、TIFF、GIF 图片和 PDF
 - **丰富的输出**：Markdown 文本、标注图片、提取的图片区域、JSON 元数据
 - **OpenAPI 文档**：完整的 Swagger UI 和 ReDoc 文档
+
+## 配置优先级
+
+配置从以下来源加载（优先级从高到低）：
+
+1. **命令行参数** - 最高优先级，用于临时覆盖
+2. **环境变量** - `DEEPSEEK_OCR_*` 前缀
+3. **.env 文件** - 项目根目录的 `.env` 文件
+4. **默认值** - `config.py` 中定义的默认值
 
 ## 安装
 
@@ -23,17 +32,30 @@ pip install fastapi uvicorn python-multipart pydantic-settings pillow pymupdf tq
 
 ## 快速开始
 
+### 推荐方式：使用 .env 文件
+
+```bash
+# 1. 复制示例配置文件
+cp deepseek_ocr2_api/.env.example .env
+
+# 2. 编辑 .env 文件，修改需要的配置
+vim .env
+
+# 3. 启动服务
+./deepseek_ocr2_api/scripts/start.sh
+```
+
 ### 使用启动脚本
 
 ```bash
-# 基本启动
+# 基本启动（自动加载 .env）
 ./deepseek_ocr2_api/scripts/start.sh
 
-# 指定模型路径和 GPU 内存
-./deepseek_ocr2_api/scripts/start.sh --model-path /path/to/model --gpu-memory-utilization 0.8
+# 临时覆盖某些配置
+./deepseek_ocr2_api/scripts/start.sh --gpu-memory-utilization 0.8 --port 8080
 
-# 使用异步模式
-./deepseek_ocr2_api/scripts/start.sh --mode async
+# 使用自定义 .env 文件
+./deepseek_ocr2_api/scripts/start.sh --env-file /path/to/custom.env
 
 # 查看所有选项
 ./deepseek_ocr2_api/scripts/start.sh --help
@@ -42,34 +64,30 @@ pip install fastapi uvicorn python-multipart pydantic-settings pillow pymupdf tq
 ### 使用 Python 模块
 
 ```bash
-# 基本启动
+# 基本启动（自动加载 .env）
 python -m deepseek_ocr2_api
 
-# 指定参数
-python -m deepseek_ocr2_api --model-path /path/to/model --gpu-memory-utilization 0.8 --port 8080
+# 临时覆盖参数
+python -m deepseek_ocr2_api --gpu-memory-utilization 0.8 --port 8080
 ```
 
-### 使用环境变量
-
-```bash
-export DEEPSEEK_OCR_MODEL_PATH=/path/to/model
-export DEEPSEEK_OCR_GPU_MEMORY_UTILIZATION=0.8
-export DEEPSEEK_OCR_HOST=0.0.0.0
-export DEEPSEEK_OCR_PORT=8080
-
-python -m deepseek_ocr2_api
-```
-
-### 使用 .env 文件
-
-创建 `.env` 文件：
+### .env 文件示例
 
 ```env
+# 模型配置
 DEEPSEEK_OCR_MODEL_PATH=deepseek-ai/DeepSeek-OCR2-Pro
+
+# GPU 配置
 DEEPSEEK_OCR_GPU_MEMORY_UTILIZATION=0.9
 DEEPSEEK_OCR_TENSOR_PARALLEL_SIZE=1
-DEEPSEEK_OCR_MAX_TOKENS=8192
+DEEPSEEK_OCR_CUDA_VISIBLE_DEVICES=0
+
+# 服务器配置
+DEEPSEEK_OCR_HOST=0.0.0.0
+DEEPSEEK_OCR_PORT=8000
 ```
+
+完整配置选项请参考 `deepseek_ocr2_api/.env.example`。
 
 ## API 端点
 

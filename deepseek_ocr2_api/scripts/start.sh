@@ -2,180 +2,138 @@
 #
 # DeepSeek-OCR-2 API Server Startup Script
 #
+# Configuration priority (highest to lowest):
+#   1. Command line arguments
+#   2. Environment variables (DEEPSEEK_OCR_*)
+#   3. .env file
+#   4. Default values in config.py
+#
 # Usage:
 #   ./start.sh [options]
 #
 # Examples:
-#   ./start.sh                                    # Start with defaults
-#   ./start.sh --gpu-memory-utilization 0.9      # Use 90% GPU memory
-#   ./start.sh --port 8080 --cuda-devices 0,1    # Custom port and GPUs
+#   ./start.sh                                    # Start with defaults/.env
+#   ./start.sh --gpu-memory-utilization 0.9      # Override GPU memory
+#   ./start.sh --env-file /path/to/.env          # Use custom .env file
 #
 
 set -e
 
-# Default values
-HOST="${DEEPSEEK_OCR2_HOST:-0.0.0.0}"
-PORT="${DEEPSEEK_OCR2_PORT:-8000}"
-WORKERS="${DEEPSEEK_OCR2_WORKERS:-1}"
-MODEL_PATH="${DEEPSEEK_OCR2_MODEL_PATH:-deepseek-ai/DeepSeek-OCR-2}"
-DTYPE="${DEEPSEEK_OCR2_DTYPE:-bfloat16}"
-CUDA_DEVICES="${DEEPSEEK_OCR2_CUDA_VISIBLE_DEVICES:-0}"
-GPU_MEMORY="${DEEPSEEK_OCR2_GPU_MEMORY_UTILIZATION:-0.8}"
-TENSOR_PARALLEL="${DEEPSEEK_OCR2_TENSOR_PARALLEL_SIZE:-1}"
-MAX_MODEL_LEN="${DEEPSEEK_OCR2_MAX_MODEL_LEN:-8192}"
-ENGINE_MODE="${DEEPSEEK_OCR2_ENGINE_MODE:-sync}"
+# Script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+ROOT_DIR="$(dirname "$PROJECT_DIR")"
+
+# Default .env file location
+ENV_FILE="${ROOT_DIR}/.env"
+
+# Collect CLI arguments to pass through
+CLI_ARGS=()
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --host)
-            HOST="$2"
+        --env-file)
+            ENV_FILE="$2"
             shift 2
-            ;;
-        --port)
-            PORT="$2"
-            shift 2
-            ;;
-        --workers)
-            WORKERS="$2"
-            shift 2
-            ;;
-        --model-path)
-            MODEL_PATH="$2"
-            shift 2
-            ;;
-        --dtype)
-            DTYPE="$2"
-            shift 2
-            ;;
-        --cuda-devices)
-            CUDA_DEVICES="$2"
-            shift 2
-            ;;
-        --gpu-memory-utilization)
-            GPU_MEMORY="$2"
-            shift 2
-            ;;
-        --tensor-parallel-size)
-            TENSOR_PARALLEL="$2"
-            shift 2
-            ;;
-        --max-model-len)
-            MAX_MODEL_LEN="$2"
-            shift 2
-            ;;
-        --engine-mode)
-            ENGINE_MODE="$2"
-            shift 2
-            ;;
-        --reload)
-            RELOAD="--reload"
-            shift
             ;;
         --help|-h)
-            echo "DeepSeek-OCR-2 API Server"
-            echo ""
-            echo "Usage: $0 [options]"
-            echo ""
-            echo "Server Options:"
-            echo "  --host HOST                    Server host (default: 0.0.0.0)"
-            echo "  --port PORT                    Server port (default: 8000)"
-            echo "  --workers N                    Number of workers (default: 1)"
-            echo "  --reload                       Enable auto-reload"
-            echo ""
-            echo "Model Options:"
-            echo "  --model-path PATH              Model path (default: deepseek-ai/DeepSeek-OCR-2)"
-            echo "  --dtype TYPE                   Data type: bfloat16, float16, float32 (default: bfloat16)"
-            echo ""
-            echo "GPU Options:"
-            echo "  --cuda-devices DEVICES         CUDA devices (default: 0)"
-            echo "  --gpu-memory-utilization RATIO GPU memory ratio 0.1-1.0 (default: 0.8)"
-            echo "  --tensor-parallel-size N       Tensor parallel GPUs (default: 1)"
-            echo ""
-            echo "vLLM Options:"
-            echo "  --max-model-len N              Max sequence length (default: 8192)"
-            echo "  --engine-mode MODE             sync or async (default: sync)"
-            echo ""
-            echo "Environment Variables:"
-            echo "  All options can be set via DEEPSEEK_OCR2_* environment variables"
-            echo "  Example: DEEPSEEK_OCR2_GPU_MEMORY_UTILIZATION=0.9"
-            echo ""
+            cat << 'EOF'
+DeepSeek-OCR-2 API Server
+
+Usage: ./start.sh [options]
+
+Configuration is loaded from (highest priority first):
+  1. Command line arguments (passed to this script)
+  2. Environment variables (DEEPSEEK_OCR_*)
+  3. .env file (default: project root, or specify with --env-file)
+  4. Default values in config.py
+
+Script Options:
+  --env-file PATH        Path to .env file (default: project root/.env)
+  --help, -h             Show this help message
+
+All other options are passed directly to the Python server.
+Run 'python -m deepseek_ocr2_api --help' for full server options.
+
+Common Options:
+  --host HOST                    Server host (default: 0.0.0.0)
+  --port PORT                    Server port (default: 8000)
+  --model-path PATH              Model path
+  --gpu-memory-utilization RATIO GPU memory ratio 0.1-1.0
+  --tensor-parallel-size N       Tensor parallel GPUs
+  --mode MODE                    Engine mode: sync or async
+  --reload                       Enable auto-reload for development
+
+Environment Variables (prefix: DEEPSEEK_OCR_):
+  DEEPSEEK_OCR_MODEL_PATH
+  DEEPSEEK_OCR_GPU_MEMORY_UTILIZATION
+  DEEPSEEK_OCR_TENSOR_PARALLEL_SIZE
+  DEEPSEEK_OCR_HOST
+  DEEPSEEK_OCR_PORT
+  ... (see config.py for full list)
+
+Examples:
+  # Use .env file configuration
+  ./start.sh
+
+  # Override specific settings
+  ./start.sh --gpu-memory-utilization 0.8 --port 8080
+
+  # Use custom .env file
+  ./start.sh --env-file /path/to/custom.env
+
+  # Development mode with auto-reload
+  ./start.sh --reload
+EOF
             exit 0
             ;;
         *)
-            echo "Unknown option: $1"
-            echo "Use --help for usage information"
-            exit 1
+            # Pass through all other arguments
+            CLI_ARGS+=("$1")
+            shift
             ;;
     esac
 done
 
-# Export environment variables
-export DEEPSEEK_OCR2_HOST="$HOST"
-export DEEPSEEK_OCR2_PORT="$PORT"
-export DEEPSEEK_OCR2_WORKERS="$WORKERS"
-export DEEPSEEK_OCR2_MODEL_PATH="$MODEL_PATH"
-export DEEPSEEK_OCR2_DTYPE="$DTYPE"
-export DEEPSEEK_OCR2_CUDA_VISIBLE_DEVICES="$CUDA_DEVICES"
-export DEEPSEEK_OCR2_GPU_MEMORY_UTILIZATION="$GPU_MEMORY"
-export DEEPSEEK_OCR2_TENSOR_PARALLEL_SIZE="$TENSOR_PARALLEL"
-export DEEPSEEK_OCR2_MAX_MODEL_LEN="$MAX_MODEL_LEN"
-export DEEPSEEK_OCR2_ENGINE_MODE="$ENGINE_MODE"
+# Load .env file if it exists (without overriding existing env vars)
+if [ -f "$ENV_FILE" ]; then
+    echo "Loading configuration from: $ENV_FILE"
+    # Export variables from .env only if not already set
+    set -a
+    while IFS='=' read -r key value || [ -n "$key" ]; do
+        # Skip comments and empty lines
+        [[ "$key" =~ ^#.*$ ]] && continue
+        [[ -z "$key" ]] && continue
+        # Remove quotes from value
+        value="${value%\"}"
+        value="${value#\"}"
+        value="${value%\'}"
+        value="${value#\'}"
+        # Only set if not already in environment
+        if [ -z "${!key}" ]; then
+            export "$key=$value"
+        fi
+    done < "$ENV_FILE"
+    set +a
+fi
 
-# Set CUDA devices
-export CUDA_VISIBLE_DEVICES="$CUDA_DEVICES"
-
-# Disable vLLM V1 engine
+# Set required environment variables for vLLM
 export VLLM_USE_V1=0
 
-# Print configuration
+# Set CUDA_VISIBLE_DEVICES if specified in env
+if [ -n "$DEEPSEEK_OCR_CUDA_VISIBLE_DEVICES" ]; then
+    export CUDA_VISIBLE_DEVICES="$DEEPSEEK_OCR_CUDA_VISIBLE_DEVICES"
+fi
+
+# Print startup banner
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║           DeepSeek-OCR-2 API Server                          ║"
-echo "╠══════════════════════════════════════════════════════════════╣"
-echo "║  Model:     $MODEL_PATH"
-echo "║  Host:      $HOST"
-echo "║  Port:      $PORT"
-echo "║  Workers:   $WORKERS"
-echo "║  GPU Mem:   $GPU_MEMORY"
-echo "║  CUDA:      $CUDA_DEVICES"
-echo "║  Mode:      $ENGINE_MODE"
-echo "╠══════════════════════════════════════════════════════════════╣"
-echo "║  Docs:      http://$HOST:$PORT/docs"
-echo "║  ReDoc:     http://$HOST:$PORT/redoc"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
-# Get the directory of this script
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+# Change to project root directory
+cd "$ROOT_DIR"
 
-# Change to project directory
-cd "$PROJECT_DIR/.."
-
-# Start the server
-if [ -n "$RELOAD" ]; then
-    python -m deepseek_ocr2_api \
-        --host "$HOST" \
-        --port "$PORT" \
-        --workers "$WORKERS" \
-        --model-path "$MODEL_PATH" \
-        --dtype "$DTYPE" \
-        --cuda-devices "$CUDA_DEVICES" \
-        --gpu-memory-utilization "$GPU_MEMORY" \
-        --tensor-parallel-size "$TENSOR_PARALLEL" \
-        --max-model-len "$MAX_MODEL_LEN" \
-        --engine-mode "$ENGINE_MODE" \
-        --reload
-else
-    python -m deepseek_ocr2_api \
-        --host "$HOST" \
-        --port "$PORT" \
-        --workers "$WORKERS" \
-        --model-path "$MODEL_PATH" \
-        --dtype "$DTYPE" \
-        --cuda-devices "$CUDA_DEVICES" \
-        --gpu-memory-utilization "$GPU_MEMORY" \
-        --tensor-parallel-size "$TENSOR_PARALLEL" \
-        --max-model-len "$MAX_MODEL_LEN" \
-        --engine-mode "$ENGINE_MODE"
-fi
+# Start the server with any CLI arguments
+exec python -m deepseek_ocr2_api "${CLI_ARGS[@]}"
