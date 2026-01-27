@@ -36,6 +36,7 @@ from ..utils.packaging import (
     create_temp_directory,
     cleanup_temp_files,
 )
+from ..utils import unescape_string
 from ..schemas.request import ImageOCRRequest, PDFOCRRequest, BatchOCRRequest
 from ..schemas.response import OCRResponse, OCRResult, ErrorResponse
 
@@ -137,7 +138,7 @@ async def ocr_image(
         logger.info(f"[{request_id}] Image size: {image.size}")
 
         # Prepare prompt
-        actual_prompt = prompt if prompt else settings.default_prompt
+        actual_prompt = unescape_string(prompt) if prompt else settings.default_prompt
 
         # Prepare input
         _crop_mode = crop_mode if crop_mode is not None else settings.crop_mode
@@ -280,7 +281,7 @@ async def ocr_pdf(
         logger.info(f"[{request_id}] PDF has {len(images)} pages")
 
         # Prepare prompt
-        actual_prompt = prompt if prompt else settings.default_prompt
+        actual_prompt = unescape_string(prompt) if prompt else settings.default_prompt
 
         # Prepare batch inputs
         _crop_mode = crop_mode if crop_mode is not None else settings.crop_mode
@@ -345,7 +346,7 @@ async def ocr_pdf(
 
         # Package results
         original_name = os.path.splitext(file.filename)[0]
-        _page_sep = page_separator if page_separator else settings.page_separator
+        _page_sep = unescape_string(page_separator) if page_separator else settings.page_separator
 
         zip_path = create_pdf_result_package(
             results=results,
@@ -457,7 +458,7 @@ async def ocr_batch(
             images.append(image.convert('RGB'))
 
         # Prepare prompt
-        actual_prompt = prompt if prompt else settings.default_prompt
+        actual_prompt = unescape_string(prompt) if prompt else settings.default_prompt
 
         # Prepare batch inputs
         _crop_mode = crop_mode if crop_mode is not None else settings.crop_mode
@@ -588,7 +589,7 @@ async def ocr_image_json(
         image = image.convert('RGB')
 
         # Prepare prompt
-        actual_prompt = prompt if prompt else settings.default_prompt
+        actual_prompt = unescape_string(prompt) if prompt else settings.default_prompt
 
         # Prepare input
         _crop_mode = crop_mode if crop_mode is not None else settings.crop_mode
