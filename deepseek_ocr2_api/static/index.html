@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DeepSeek OCR 2 - Web Interface</title>
-    <link rel="icon" type="image/x-icon" href="favicon.ico">
-    <link rel="stylesheet" href="vendor/katex/katex.min.css">
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="stylesheet" href="/static/vendor/katex/katex.min.css">
     <style>
         * {
             margin: 0;
@@ -470,10 +470,11 @@
         }
 
         .preview-pane {
-            flex: 1;
+            flex: 1 1 0;
             display: flex;
             flex-direction: column;
             border-right: 2px solid #ddd;
+            min-width: 0;
         }
 
         .preview-pane:last-child {
@@ -493,6 +494,7 @@
             position: relative;
             background: #fff;
             overflow: auto;
+            min-width: 0;
         }
 
         .preview-pane iframe {
@@ -506,6 +508,9 @@
             color: #2d3436;
             line-height: 1.7;
             font-size: 0.98em;
+            max-width: 100%;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         .markdown-content h1,
@@ -536,6 +541,9 @@
             border-collapse: collapse;
             width: 100%;
             margin: 15px 0;
+            display: block;
+            overflow-x: auto;
+            max-width: 100%;
         }
 
         .markdown-content th,
@@ -792,9 +800,9 @@
         </div>
     </div>
 
-    <script src="vendor/marked/marked.min.js"></script>
-    <script src="vendor/katex/katex.min.js"></script>
-    <script src="vendor/marked-katex-extension/index.umd.js"></script>
+    <script src="/static/vendor/marked/marked.min.js"></script>
+    <script src="/static/vendor/katex/katex.min.js"></script>
+    <script src="/static/vendor/marked-katex-extension/index.umd.js"></script>
     <script>
         const API_BASE = window.location.origin;
         let pollingInterval = null;
@@ -1002,6 +1010,7 @@
             }
             if (window.markedKatex) {
                 window.marked.use(window.markedKatex({
+                    nonStandard: true,
                     throwOnError: false,
                     output: 'html'
                 }));
@@ -1025,11 +1034,21 @@
             return htmlText || '';
         }
 
-        function renderMarkdown(markdownText) {
-            if (window.marked) {
-                return window.marked.parse(markdownText || '');
+        function normalizeMarkdownMath(markdownText) {
+            if (!markdownText) {
+                return '';
             }
-            return `<pre>${escapeHtml(markdownText || '')}</pre>`;
+            return markdownText
+                .replace(/\\\[((?:.|\n)*?)\\\]/g, '$$\n$1\n$$')
+                .replace(/\\\(([^\\n]+?)\\\)/g, '$$$1$$');
+        }
+
+        function renderMarkdown(markdownText) {
+            const normalized = normalizeMarkdownMath(markdownText || '');
+            if (window.marked) {
+                return window.marked.parse(normalized);
+            }
+            return `<pre>${escapeHtml(normalized)}</pre>`;
         }
 
         function setPrompt(type) {

@@ -11,7 +11,7 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -144,6 +144,8 @@ All parameters can be configured via:
 
     # Get static files directory
     static_dir = Path(__file__).parent / "static"
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
     # Global exception handler
     @app.exception_handler(Exception)
@@ -174,6 +176,13 @@ All parameters can be configured via:
             "redoc": "/redoc",
             "health": "/api/v1/health",
         }
+
+    @app.get("/favicon.ico")
+    async def favicon():
+        icon_file = static_dir / "favicon.ico"
+        if icon_file.exists():
+            return FileResponse(icon_file, media_type="image/x-icon")
+        raise HTTPException(status_code=404, detail="Favicon not found")
 
     return app
 
