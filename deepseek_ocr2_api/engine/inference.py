@@ -253,10 +253,7 @@ async def async_generate_single(
             if request_output.outputs:
                 final_output = request_output.outputs[0].text
 
-        # Clean up end of sentence token
-        if '<｜end▁of▁sentence｜>' in final_output:
-            final_output = final_output.replace('<｜end▁of▁sentence｜>', '')
-
+        # Don't clean EOS token here - let caller check completion status first
         logger.debug(f"[{request_id}] Inference complete, releasing semaphore")
         return final_output
 

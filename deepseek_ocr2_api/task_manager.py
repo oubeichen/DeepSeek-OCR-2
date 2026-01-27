@@ -341,11 +341,14 @@ class TaskManager:
                         )
                         task.processed_pages = 1
 
+                        # Clean EOS token before processing
+                        clean_text = output_text.replace('<｜end▁of▁sentence｜>', '')
+
                         task.add_log("Processing output...")
 
                         # Post-process
                         result = process_output(
-                            text=output_text,
+                            text=clean_text,
                             image=image,
                             output_dir=task.output_dir,
                             page_index=0,
@@ -431,15 +434,19 @@ class TaskManager:
                         annotated_images = []
 
                         for idx, (output_text, image) in enumerate(zip(outputs, images)):
-                            # Check for incomplete output
-                            if '<｜end▁of▁sentence｜>' not in output_text and skip_repeat_pages:
+                            # Check for incomplete output (no EOS token)
+                            has_eos = '<｜end▁of▁sentence｜>' in output_text
+                            if not has_eos and skip_repeat_pages:
                                 task.add_log(f"Page {idx + 1} appears incomplete, skipping")
                                 continue
+
+                            # Clean EOS token before processing
+                            clean_text = output_text.replace('<｜end▁of▁sentence｜>', '')
 
                             task.add_log(f"Processing page {idx + 1}/{len(images)}")
 
                             result = process_output(
-                                text=output_text,
+                                text=clean_text,
                                 image=image,
                                 output_dir=task.output_dir,
                                 page_index=idx,

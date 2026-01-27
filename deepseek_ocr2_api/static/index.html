@@ -953,10 +953,12 @@
                 if (!taskId) {
                     return;
                 }
+                const prevCount = parseInt(logEl.dataset.logCount || '0', 10);
                 const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 10;
                 logScrollStates.set(taskId, {
                     scrollTop: logEl.scrollTop,
-                    atBottom
+                    atBottom,
+                    logCount: Number.isNaN(prevCount) ? 0 : prevCount
                 });
             });
 
@@ -1005,7 +1007,7 @@
                             ${task.error_message ? `<div style="color: red;">错误: ${task.error_message}</div>` : ''}
                         </div>
                         ${paramsHtml}
-                        ${logs ? `<div class="task-logs" data-task-id="${task.task_id}">${logs}</div>` : ''}
+                        ${logs ? `<div class="task-logs" data-task-id="${task.task_id}" data-log-count="${task.logs.length}">${logs}</div>` : ''}
                         <div class="btn-group">
                             <button class="btn btn-small btn-preview" onclick="openPreview('${task.task_id}', '${task.status}')">
                                 👁️ 预览
@@ -1027,7 +1029,13 @@
                 document.querySelectorAll('.task-logs').forEach(logEl => {
                     const taskId = logEl.dataset.taskId;
                     const prevState = taskId ? logScrollStates.get(taskId) : null;
-                    if (!prevState || prevState.atBottom) {
+                    const currentCount = parseInt(logEl.dataset.logCount || '0', 10);
+                    const hasNewLogs = prevState ? currentCount > prevState.logCount : true;
+                    if (!prevState) {
+                        logEl.scrollTop = logEl.scrollHeight;
+                        return;
+                    }
+                    if (prevState.atBottom && hasNewLogs) {
                         logEl.scrollTop = logEl.scrollHeight;
                         return;
                     }
