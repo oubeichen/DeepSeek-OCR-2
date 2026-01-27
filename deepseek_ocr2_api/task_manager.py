@@ -496,7 +496,7 @@ class TaskManager:
                                     input_data, sampling_params, request_id
                                 )
                                 task.processed_pages += 1
-                                task.add_log(f"Page {idx + 1}/{len(images)} inference complete")
+                                task.add_log(f"Inference progress: {task.processed_pages}/{len(images)}")
                                 return idx, result
                             finally:
                                 # Always release the slot
