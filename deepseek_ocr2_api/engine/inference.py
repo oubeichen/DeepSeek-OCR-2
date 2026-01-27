@@ -34,9 +34,8 @@ class SmartScheduler:
     - 2 active tasks: each can use half (e.g., 2 slots each)
     - 4+ active tasks: each gets at least 1 slot
 
-    Key feature: When a new task arrives, existing tasks' quotas are reduced
-    dynamically. Already-acquired slots are not forcibly released, but new
-    slot acquisitions respect the new quota.
+    Supports max_concurrent_tasks to limit how many tasks run simultaneously.
+    Tasks beyond this limit wait in queue.
     """
 
     _instance: "SmartScheduler" = None
@@ -44,9 +43,11 @@ class SmartScheduler:
 
     def __init__(self):
         self._global_semaphore: asyncio.Semaphore = None
+        self._task_semaphore: asyncio.Semaphore = None  # Limits concurrent tasks
         self._task_slots: Dict[str, int] = {}  # task_id -> current slots held
         self._task_lock = asyncio.Lock()
         self._max_concurrency: int = 4
+        self._max_concurrent_tasks: int = 0  # 0 = no limit
         self._initialized = False
 
     @classmethod
@@ -64,10 +65,49 @@ class SmartScheduler:
             return
         settings = get_settings()
         self._max_concurrency = settings.inference_concurrency
+        self._max_concurrent_tasks = settings.max_concurrent_tasks
         # Use the global inference semaphore
         self._global_semaphore = await get_inference_semaphore()
+        # Create task semaphore if limit is set
+        if self._max_concurrent_tasks > 0:
+            self._task_semaphore = asyncio.Semaphore(self._max_concurrent_tasks)
         self._initialized = True
-        logger.info(f"SmartScheduler initialized: max_concurrency={self._max_concurrency}")
+        logger.info(
+            f"SmartScheduler initialized: max_concurrency={self._max_concurrency}, "
+            f"max_concurrent_tasks={self._max_concurrent_tasks or 'unlimited'}"
+        )
+
+    async def register_task(self, task_id: str):
+        """
+        Register a new task with the scheduler.
+
+        If max_concurrent_tasks is set, this will block until a task slot is available.
+        """
+        # Wait for task slot if limit is set
+        if self._task_semaphore is not None:
+            await self._task_semaphore.acquire()
+            logger.debug(f"Task {task_id} acquired task slot")
+
+        async with self._task_lock:
+            if task_id not in self._task_slots:
+                self._task_slots[task_id] = 0
+                logger.debug(
+                    f"Task {task_id} registered. Active tasks: {len(self._task_slots)}"
+                )
+
+    async def unregister_task(self, task_id: str):
+        """Unregister a task from the scheduler."""
+        async with self._task_lock:
+            if task_id in self._task_slots:
+                del self._task_slots[task_id]
+                logger.debug(
+                    f"Task {task_id} unregistered. Active tasks: {len(self._task_slots)}"
+                )
+
+        # Release task slot if limit is set
+        if self._task_semaphore is not None:
+            self._task_semaphore.release()
+            logger.debug(f"Task {task_id} released task slot")
 
     async def acquire_slot(self, task_id: str) -> bool:
         """
@@ -123,24 +163,6 @@ class SmartScheduler:
         await self._global_semaphore.acquire()
         logger.debug(f"Task {task_id} acquired slot (now has {self._task_slots.get(task_id, 0)})")
         return True
-
-    async def register_task(self, task_id: str):
-        """Register a new task with the scheduler."""
-        async with self._task_lock:
-            if task_id not in self._task_slots:
-                self._task_slots[task_id] = 0
-                logger.debug(
-                    f"Task {task_id} registered. Active tasks: {len(self._task_slots)}"
-                )
-
-    async def unregister_task(self, task_id: str):
-        """Unregister a task from the scheduler."""
-        async with self._task_lock:
-            if task_id in self._task_slots:
-                del self._task_slots[task_id]
-                logger.debug(
-                    f"Task {task_id} unregistered. Active tasks: {len(self._task_slots)}"
-                )
 
     async def release_slot(self, task_id: str):
         """Release an inference slot."""

@@ -231,6 +231,16 @@ class Settings(BaseSettings):
                     "slots based on active task count: 1 task uses all slots, "
                     "2 tasks share equally, etc."
     )
+    max_concurrent_tasks: int = Field(
+        default=0,
+        ge=0,
+        le=100,
+        description="Maximum number of tasks that can run concurrently. "
+                    "Tasks beyond this limit wait in queue. "
+                    "0 = no limit (all tasks run immediately). "
+                    "Recommended: set to inference_concurrency to ensure each task "
+                    "gets at least 1 slot."
+    )
 
     # ====================
     # Task Storage Settings
