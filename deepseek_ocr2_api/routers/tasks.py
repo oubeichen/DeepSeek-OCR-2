@@ -21,6 +21,7 @@ import logging
 
 from ..task_manager import TaskManager, TaskType, TaskStatus
 from ..config import get_settings
+from ..utils import unescape_string
 
 logger = logging.getLogger(__name__)
 
@@ -185,8 +186,8 @@ async def upload_file(
     settings = get_settings()
     ocr_params = {}
 
-    # Prompt (treat empty string as None)
-    ocr_params["prompt"] = prompt if prompt else settings.default_prompt
+    # Prompt (treat empty string as None, apply unescape)
+    ocr_params["prompt"] = unescape_string(prompt) if prompt else settings.default_prompt
 
     # Sampling parameters
     if temperature is not None:
@@ -211,9 +212,9 @@ async def upload_file(
 
     # PDF processing parameters
     ocr_params["dpi"] = dpi if dpi is not None else settings.pdf_dpi
-    # Treat empty string as None for page_separator
+    # Treat empty string as None for page_separator, apply unescape
     if page_separator:
-        ocr_params["page_separator"] = page_separator
+        ocr_params["page_separator"] = unescape_string(page_separator)
     if skip_repeat_pages is not None:
         ocr_params["skip_repeat_pages"] = skip_repeat_pages
 
