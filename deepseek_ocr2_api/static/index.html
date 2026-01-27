@@ -1084,7 +1084,15 @@
                 }
                 return line;
             });
-            return normalizedLines.join('\n');
+            text = normalizedLines.join('\n');
+
+            text = text.replace(/(^|\n)([ \t]*)\$\$\s*\n([\s\S]*?)\n[ \t]*\$\$(?=\n|$)/g, (match, lead, indent, content) => {
+                const indentRegex = indent ? new RegExp(`^${indent}`, 'gm') : null;
+                const trimmedContent = indentRegex ? content.replace(indentRegex, '') : content;
+                return `${lead}$$\n${trimmedContent}\n$$`;
+            });
+
+            return text;
         }
 
         function renderMarkdown(markdownText) {
