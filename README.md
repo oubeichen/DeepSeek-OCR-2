@@ -148,7 +148,7 @@ python run_dpsk_ocr2.py
 
 We would like to thank [DeepSeek-OCR](https://github.com/deepseek-ai/DeepSeek-OCR/), [Vary](https://github.com/Ucas-HaoranWei/Vary/), [GOT-OCR2.0](https://github.com/Ucas-HaoranWei/GOT-OCR2.0/), [MinerU](https://github.com/opendatalab/MinerU), [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR) for their valuable models.
 
-We also appreciate the benchmark [OminiDocBench](https://github.com/opendatalab/OmniDocBench).
+We also appreciate the benchmark [OmniDocBench](https://github.com/opendatalab/OmniDocBench).
 
 ## Citation
 
