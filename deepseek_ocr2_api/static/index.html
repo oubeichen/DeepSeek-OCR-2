@@ -487,6 +487,10 @@
             border-bottom: 2px solid #ddd;
             font-weight: bold;
             color: #333;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
         }
 
         .preview-pane-content {
@@ -562,6 +566,20 @@
             margin: 0;
             padding-left: 15px;
             color: #666;
+        }
+
+        .markdown-raw {
+            background: #f4f4f4;
+            padding: 12px;
+            border-radius: 6px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .btn-toggle-raw {
+            background: #636e72;
         }
 
         .preview-loading {
@@ -790,7 +808,10 @@
                     </div>
                 </div>
                 <div class="preview-pane">
-                    <div class="preview-pane-header">📝 识别结果 (Markdown)</div>
+                    <div class="preview-pane-header">
+                        <span>📝 识别结果 (Markdown)</span>
+                        <button class="btn btn-small btn-toggle-raw" id="toggleRawBtn" type="button" disabled>查看原文</button>
+                    </div>
                     <div class="preview-pane-content">
                         <div class="preview-loading" id="resultLoading">等待任务完成...</div>
                         <div id="resultContent" class="markdown-content" style="display:none;"></div>
@@ -811,6 +832,8 @@
         let promptTemplates = {};
         let presets = {};
         let previewRequestToken = 0;
+        let previewRawMode = false;
+        let lastPreviewMarkdown = '';
 
         // Load configuration from server
         async function loadConfig() {
@@ -986,6 +1009,13 @@
             }
         });
 
+        document.getElementById('toggleRawBtn').addEventListener('click', () => {
+            if (!lastPreviewMarkdown) {
+                return;
+            }
+            setPreviewMode(!previewRawMode);
+        });
+
         // Configuration functions
         function toggleConfig() {
             const content = document.getElementById('configContent');
@@ -1049,6 +1079,25 @@
                 return window.marked.parse(normalized);
             }
             return `<pre>${escapeHtml(normalized)}</pre>`;
+        }
+
+        function setPreviewMode(rawMode) {
+            const toggleRawBtn = document.getElementById('toggleRawBtn');
+            const resultContent = document.getElementById('resultContent');
+            previewRawMode = rawMode;
+            if (!lastPreviewMarkdown) {
+                toggleRawBtn.disabled = true;
+                toggleRawBtn.textContent = '查看原文';
+                return;
+            }
+            toggleRawBtn.disabled = false;
+            if (previewRawMode) {
+                toggleRawBtn.textContent = '查看渲染';
+                resultContent.innerHTML = `<pre class="markdown-raw">${escapeHtml(lastPreviewMarkdown)}</pre>`;
+            } else {
+                toggleRawBtn.textContent = '查看原文';
+                resultContent.innerHTML = renderMarkdown(lastPreviewMarkdown);
+            }
         }
 
         function setPrompt(type) {
@@ -1318,6 +1367,7 @@
             const originalLoading = document.getElementById('originalLoading');
             const resultLoading = document.getElementById('resultLoading');
             const currentToken = ++previewRequestToken;
+            const toggleRawBtn = document.getElementById('toggleRawBtn');
 
             // Reset frames
             originalFrame.style.display = 'none';
@@ -1325,6 +1375,10 @@
             resultContent.innerHTML = '';
             originalLoading.style.display = 'block';
             resultLoading.style.display = 'block';
+            lastPreviewMarkdown = '';
+            previewRawMode = false;
+            toggleRawBtn.disabled = true;
+            toggleRawBtn.textContent = '查看原文';
 
             // Show modal
             modal.classList.add('show');
@@ -1352,7 +1406,8 @@
                             return;
                         }
                         const markdown = extractMarkdownFromPreview(htmlText);
-                        resultContent.innerHTML = renderMarkdown(markdown);
+                        lastPreviewMarkdown = markdown;
+                        setPreviewMode(false);
                         resultLoading.style.display = 'none';
                         resultContent.style.display = 'block';
                     })
@@ -1377,6 +1432,11 @@
             const resultContent = document.getElementById('resultContent');
             resultContent.innerHTML = '';
             resultContent.style.display = 'none';
+            lastPreviewMarkdown = '';
+            previewRawMode = false;
+            const toggleRawBtn = document.getElementById('toggleRawBtn');
+            toggleRawBtn.disabled = true;
+            toggleRawBtn.textContent = '查看原文';
         }
 
         // Close modal when clicking outside
