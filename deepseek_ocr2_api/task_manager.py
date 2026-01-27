@@ -6,12 +6,13 @@ and fair scheduling across multiple files.
 """
 
 import asyncio
+import json
 import os
 import shutil
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -87,7 +88,36 @@ class OCRTask:
             "ocr_params": self.ocr_params,
             "total_pages": self.total_pages,
             "processed_pages": self.processed_pages,
+            "input_file_path": self.input_file_path,
+            "output_dir": self.output_dir,
+            "result_zip_path": self.result_zip_path,
         }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "OCRTask":
+        """Create an OCRTask from a dictionary."""
+        task = cls(
+            task_id=data["task_id"],
+            filename=data["filename"],
+            task_type=TaskType(data["task_type"]),
+            status=TaskStatus(data["status"]),
+            created_at=data.get("created_at", datetime.now().isoformat()),
+            completed_at=data.get("completed_at"),
+            error_message=data.get("error_message"),
+            ocr_params=data.get("ocr_params", {}),
+            input_file_path=data.get("input_file_path"),
+            output_dir=data.get("output_dir"),
+            result_zip_path=data.get("result_zip_path"),
+            total_pages=data.get("total_pages", 0),
+            processed_pages=data.get("processed_pages", 0),
+        )
+        # Restore logs
+        for log_data in data.get("logs", []):
+            task.logs.append(TaskLog(
+                timestamp=log_data["timestamp"],
+                message=log_data["message"]
+            ))
+        return task
 
 
 class TaskManager:
@@ -98,20 +128,33 @@ class TaskManager:
     - Multiple concurrent task workers (configurable via task_concurrent_files)
     - Page-level fair scheduling via global inference semaphore
     - Smaller files can complete faster even when larger files are processing
+    - Task persistence across server restarts
+    - Automatic cleanup of old tasks
 
     Singleton pattern to ensure only one instance exists.
     """
 
     _instance: Optional["TaskManager"] = None
     _lock = threading.Lock()
+    _tasks_index_file = "tasks_index.json"
 
     def __init__(self):
+        from .config import get_settings
+        settings = get_settings()
+
         self.tasks: Dict[str, OCRTask] = {}
         self.queue: asyncio.Queue = asyncio.Queue()
         self._processing = False
         self._worker_tasks: List[asyncio.Task] = []
-        self._storage_dir = Path("/tmp/deepseek_ocr2_tasks")
+        self._storage_dir = Path(settings.task_storage_dir)
         self._storage_dir.mkdir(parents=True, exist_ok=True)
+        self._persistence_enabled = settings.task_persistence
+        self._retention_days = settings.task_retention_days
+        self._last_cleanup_check: Optional[datetime] = None
+
+        # Load persisted tasks on startup
+        if self._persistence_enabled:
+            self._load_tasks()
 
     @classmethod
     def get_instance(cls) -> "TaskManager":
@@ -130,6 +173,9 @@ class TaskManager:
         ocr_params: Dict[str, Any],
     ) -> OCRTask:
         """Create a new task and add it to the queue."""
+        # Trigger cleanup check on new task creation
+        self.maybe_cleanup()
+
         task_id = f"{task_type.value}_{uuid.uuid4().hex[:12]}"
 
         # Create task output directory
@@ -148,6 +194,10 @@ class TaskManager:
 
         self.tasks[task_id] = task
         logger.info(f"Created task {task_id} for {filename}")
+
+        # Save task state
+        if self._persistence_enabled:
+            self._save_tasks()
 
         return task
 
@@ -180,10 +230,18 @@ class TaskManager:
         if task.output_dir and os.path.exists(task.output_dir):
             shutil.rmtree(task.output_dir, ignore_errors=True)
         if task.input_file_path and os.path.exists(task.input_file_path):
-            os.remove(task.input_file_path)
+            try:
+                os.remove(task.input_file_path)
+            except OSError:
+                pass
 
         del self.tasks[task_id]
         logger.info(f"Deleted task {task_id}")
+
+        # Save updated task list
+        if self._persistence_enabled:
+            self._save_tasks()
+
         return True
 
     @property
@@ -500,11 +558,19 @@ class TaskManager:
                     task.add_log("Task completed successfully")
                     logger.info(f"[Worker {worker_id}] Task {task_id} completed")
 
+                    # Save task state
+                    if self._persistence_enabled:
+                        self._save_tasks()
+
                 except Exception as e:
                     task.status = TaskStatus.FAILED
                     task.error_message = str(e)
                     task.add_log(f"Error: {str(e)}")
                     logger.error(f"[Worker {worker_id}] Task {task_id} failed: {e}", exc_info=True)
+
+                    # Save task state on failure too
+                    if self._persistence_enabled:
+                        self._save_tasks()
 
                 finally:
                     self.queue.task_done()
@@ -515,3 +581,119 @@ class TaskManager:
             except Exception as e:
                 logger.error(f"[Worker {worker_id}] Error: {e}", exc_info=True)
                 await asyncio.sleep(1)
+
+    def _save_tasks_sync(self):
+        """Synchronously save all tasks to disk (internal use)."""
+        try:
+            index_path = self._storage_dir / self._tasks_index_file
+            tasks_data = {
+                task_id: task.to_dict()
+                for task_id, task in self.tasks.items()
+            }
+            with open(index_path, "w", encoding="utf-8") as f:
+                json.dump(tasks_data, f, ensure_ascii=False, indent=2)
+            logger.debug(f"Saved {len(tasks_data)} tasks to {index_path}")
+        except Exception as e:
+            logger.error(f"Failed to save tasks: {e}")
+
+    def _save_tasks(self):
+        """Save tasks in background thread to avoid blocking."""
+        # Use a thread to avoid blocking the event loop
+        thread = threading.Thread(target=self._save_tasks_sync, daemon=True)
+        thread.start()
+
+    def _load_tasks(self):
+        """Load tasks from disk on startup."""
+        try:
+            index_path = self._storage_dir / self._tasks_index_file
+            if not index_path.exists():
+                logger.info("No persisted tasks found")
+                return
+
+            with open(index_path, "r", encoding="utf-8") as f:
+                tasks_data = json.load(f)
+
+            loaded_count = 0
+            for task_id, task_dict in tasks_data.items():
+                try:
+                    task = OCRTask.from_dict(task_dict)
+                    # Only load completed or failed tasks (not pending/processing)
+                    # Processing tasks should be re-queued or marked as failed
+                    if task.status in (TaskStatus.PENDING, TaskStatus.PROCESSING):
+                        task.status = TaskStatus.FAILED
+                        task.error_message = "Server restarted during processing"
+                        task.add_log("Task interrupted by server restart")
+                    self.tasks[task_id] = task
+                    loaded_count += 1
+                except Exception as e:
+                    logger.warning(f"Failed to load task {task_id}: {e}")
+
+            logger.info(f"Loaded {loaded_count} tasks from persistence")
+        except Exception as e:
+            logger.error(f"Failed to load tasks: {e}")
+
+    def _cleanup_old_tasks_sync(self) -> int:
+        """
+        Synchronously remove tasks older than retention_days (internal use).
+
+        Returns:
+            Number of tasks deleted.
+        """
+        if self._retention_days <= 0:
+            return 0
+
+        cutoff = datetime.now() - timedelta(days=self._retention_days)
+        cutoff_str = cutoff.isoformat()
+
+        tasks_to_delete = []
+        for task_id, task in list(self.tasks.items()):
+            # Only cleanup completed or failed tasks
+            if task.status not in (TaskStatus.COMPLETED, TaskStatus.FAILED):
+                continue
+            # Check if task is older than retention period
+            if task.created_at < cutoff_str:
+                tasks_to_delete.append(task_id)
+
+        deleted_count = 0
+        for task_id in tasks_to_delete:
+            task = self.tasks.get(task_id)
+            if not task:
+                continue
+
+            # Clean up files
+            if task.output_dir and os.path.exists(task.output_dir):
+                shutil.rmtree(task.output_dir, ignore_errors=True)
+            if task.input_file_path and os.path.exists(task.input_file_path):
+                try:
+                    os.remove(task.input_file_path)
+                except OSError:
+                    pass
+
+            del self.tasks[task_id]
+            deleted_count += 1
+
+        if deleted_count > 0:
+            logger.info(f"Cleaned up {deleted_count} old tasks (retention: {self._retention_days} days)")
+            # Save updated task list
+            self._save_tasks_sync()
+
+        return deleted_count
+
+    def cleanup_old_tasks(self) -> None:
+        """Run cleanup in background thread to avoid blocking."""
+        thread = threading.Thread(target=self._cleanup_old_tasks_sync, daemon=True)
+        thread.start()
+
+    def maybe_cleanup(self):
+        """
+        Run cleanup if enough time has passed since last check.
+        Called on new task creation to avoid needing a separate scheduler.
+        """
+        # Only check once per hour at most
+        now = datetime.now()
+        if self._last_cleanup_check is not None:
+            if (now - self._last_cleanup_check).total_seconds() < 3600:
+                return
+
+        self._last_cleanup_check = now
+        self.cleanup_old_tasks()

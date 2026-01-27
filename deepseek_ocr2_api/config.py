@@ -237,6 +237,24 @@ class Settings(BaseSettings):
                     "file can be processed at once, allowing smaller files to complete faster."
     )
 
+    # ====================
+    # Task Storage Settings
+    # ====================
+    task_storage_dir: str = Field(
+        default="/tmp/deepseek_ocr2_tasks",
+        description="Directory for task data and output files"
+    )
+    task_persistence: bool = Field(
+        default=True,
+        description="Enable task persistence across server restarts"
+    )
+    task_retention_days: int = Field(
+        default=7,
+        ge=0,
+        description="Days to keep completed tasks (0 = keep forever). "
+                    "Cleanup runs on new file upload."
+    )
+
     # ==================
     # Whitelist Tokens
     # ==================
