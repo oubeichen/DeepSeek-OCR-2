@@ -304,6 +304,7 @@ class TaskManager:
             prepare_image_input,
             prepare_batch_inputs,
             create_sampling_params,
+            get_smart_scheduler,
         )
         from .config import get_settings
         from .processors.image import load_image
@@ -468,33 +469,42 @@ class TaskManager:
                             include_stop_str_in_output=True,
                         )
 
-                        # Generate each page with fair scheduling
-                        # Use per-file semaphore to limit concurrent pages from this file
-                        # This allows smaller files to "cut in line" and complete faster
-                        task.add_log("Running OCR inference (fair scheduling)...")
+                        # Generate each page with smart scheduling
+                        # SmartScheduler dynamically allocates slots based on active task count
+                        task.add_log("Running OCR inference (smart scheduling)...")
 
-                        # Per-file semaphore limits how many pages this file can process at once
-                        max_pages = settings.max_pages_per_file
-                        file_semaphore = asyncio.Semaphore(max_pages)
+                        # Get the smart scheduler and register this task
+                        scheduler = await get_smart_scheduler()
+                        await scheduler.register_task(task_id)
 
                         async def process_page_with_limit(idx: int, input_data: Dict) -> tuple:
-                            """Process a single page with both file and global semaphores."""
-                            async with file_semaphore:
-                                # File semaphore acquired, now wait for global semaphore
+                            """Process a single page with smart scheduler."""
+                            # Wait for a slot from the smart scheduler
+                            await scheduler.wait_for_slot(task_id)
+                            try:
                                 request_id = f"{task_id}-page-{idx}"
+                                # use_semaphore=False because SmartScheduler manages concurrency
                                 result = await async_generate_single(
-                                    input_data, sampling_params, request_id
+                                    input_data, sampling_params, request_id,
+                                    use_semaphore=False
                                 )
                                 task.processed_pages += 1
                                 task.add_log(f"Page {idx + 1}/{len(images)} inference complete")
                                 return idx, result
+                            finally:
+                                # Always release the slot
+                                await scheduler.release_slot(task_id)
 
-                        # Process pages concurrently but with both semaphores limiting
+                        # Process pages concurrently with smart scheduler
                         page_tasks = [
                             process_page_with_limit(idx, input_data)
                             for idx, input_data in enumerate(batch_inputs)
                         ]
-                        results_with_idx = await asyncio.gather(*page_tasks)
+                        try:
+                            results_with_idx = await asyncio.gather(*page_tasks)
+                        finally:
+                            # Unregister task from scheduler after all pages are done
+                            await scheduler.unregister_task(task_id)
 
                         # Sort by index and extract outputs
                         results_with_idx.sort(key=lambda x: x[0])
