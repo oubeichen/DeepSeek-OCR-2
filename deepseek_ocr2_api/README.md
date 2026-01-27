@@ -51,8 +51,8 @@ vim .env
 ### 主要配置项
 
 | 环境变量 | 默认值 | 描述 |
-|----------|--------|------|
-| `DEEPSEEK_OCR_MODEL_PATH` | `deepseek-ai/DeepSeek-OCR2-Pro` | 模型路径 |
+|----------|-------|------|
+| `DEEPSEEK_OCR_MODEL_PATH` | `deepseek-ai/DeepSeek-OCR-2` | 模型路径 |
 | `DEEPSEEK_OCR_GPU_MEMORY_UTILIZATION` | `0.9` | GPU 内存使用率 |
 | `DEEPSEEK_OCR_TENSOR_PARALLEL_SIZE` | `1` | 张量并行大小 |
 | `DEEPSEEK_OCR_HOST` | `0.0.0.0` | 服务地址 |
