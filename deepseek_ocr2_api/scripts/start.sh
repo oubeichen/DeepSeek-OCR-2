@@ -96,6 +96,92 @@ EOF
     esac
 done
 
+# Function to check if we're in a virtual environment
+check_venv() {
+    if [ -n "$VIRTUAL_ENV" ] || [ -n "$CONDA_PREFIX" ]; then
+        return 0
+    fi
+    return 1
+}
+
+# Function to activate conda environment
+activate_conda() {
+    local env_name="$1"
+
+    # Check if conda is available
+    if command -v conda &> /dev/null; then
+        # Try to activate the environment
+        if conda env list | grep -q "^${env_name} "; then
+            echo "Activating conda environment: $env_name"
+            # Source conda.sh to enable conda activate in script
+            if [ -f "$HOME/miniconda3/etc/profile.d/conda.sh" ]; then
+                source "$HOME/miniconda3/etc/profile.d/conda.sh"
+            elif [ -f "$HOME/anaconda3/etc/profile.d/conda.sh" ]; then
+                source "$HOME/anaconda3/etc/profile.d/conda.sh"
+            elif [ -f "/opt/conda/etc/profile.d/conda.sh" ]; then
+                source "/opt/conda/etc/profile.d/conda.sh"
+            fi
+            conda activate "$env_name"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# Function to activate venv
+activate_venv() {
+    local venv_path="$1"
+
+    if [ -f "$venv_path/bin/activate" ]; then
+        echo "Activating virtual environment: $venv_path"
+        source "$venv_path/bin/activate"
+        return 0
+    fi
+    return 1
+}
+
+# Check and activate virtual environment if needed
+if ! check_venv; then
+    echo "No virtual environment detected. Attempting to activate..."
+
+    VENV_ACTIVATED=false
+
+    # Try conda environment first
+    if activate_conda "deepseek-ocr2"; then
+        VENV_ACTIVATED=true
+    # Try .venv in project root
+    elif activate_venv "$ROOT_DIR/.venv"; then
+        VENV_ACTIVATED=true
+    # Try .venv in API directory
+    elif activate_venv "$PROJECT_DIR/.venv"; then
+        VENV_ACTIVATED=true
+    # Try venv in project root
+    elif activate_venv "$ROOT_DIR/venv"; then
+        VENV_ACTIVATED=true
+    fi
+
+    if [ "$VENV_ACTIVATED" = false ]; then
+        echo "ERROR: No virtual environment found!"
+        echo ""
+        echo "Please create and activate a virtual environment first:"
+        echo ""
+        echo "  Option 1 - Conda:"
+        echo "    conda create -n deepseek-ocr2 python=3.10"
+        echo "    conda activate deepseek-ocr2"
+        echo ""
+        echo "  Option 2 - venv:"
+        echo "    python -m venv .venv"
+        echo "    source .venv/bin/activate"
+        echo ""
+        echo "Then install dependencies:"
+        echo "    pip install -r deepseek_ocr2_api/requirements.txt"
+        echo ""
+        exit 1
+    fi
+else
+    echo "Virtual environment already active: ${VIRTUAL_ENV:-$CONDA_PREFIX}"
+fi
+
 # Load .env file if it exists (without overriding existing env vars)
 if [ -f "$ENV_FILE" ]; then
     echo "Loading configuration from: $ENV_FILE"
