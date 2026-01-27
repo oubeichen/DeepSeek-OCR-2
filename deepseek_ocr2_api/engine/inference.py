@@ -101,7 +101,9 @@ async def async_generate(
     if not manager.is_initialized():
         raise RuntimeError("Engine not initialized. Call initialize() first.")
 
-
+    # Check if engine has errored
+    if manager.is_errored():
+        raise RuntimeError("Engine has errored. Restart required.")
 
     engine = manager.get_engine()
 
@@ -120,27 +122,41 @@ async def async_generate(
 
     if stream:
         async def stream_generator():
-            printed_length = 0
-            async for request_output in engine.generate(request, sampling_params, request_id):
-                if request_output.outputs:
-                    full_text = request_output.outputs[0].text
-                    new_text = full_text[printed_length:]
-                    printed_length = len(full_text)
-                    if new_text:
-                        yield new_text
+            try:
+                printed_length = 0
+                async for request_output in engine.generate(request, sampling_params, request_id):
+                    if request_output.outputs:
+                        full_text = request_output.outputs[0].text
+                        new_text = full_text[printed_length:]
+                        printed_length = len(full_text)
+                        if new_text:
+                            yield new_text
+            except Exception as e:
+                error_msg = str(e).lower()
+                if "errored" in error_msg or "background loop" in error_msg:
+                    logger.error(f"[{request_id}] Engine background loop error detected: {e}")
+                    manager.mark_errored()
+                raise
 
         return stream_generator()
     else:
-        final_output = ""
-        async for request_output in engine.generate(request, sampling_params, request_id):
-            if request_output.outputs:
-                final_output = request_output.outputs[0].text
+        try:
+            final_output = ""
+            async for request_output in engine.generate(request, sampling_params, request_id):
+                if request_output.outputs:
+                    final_output = request_output.outputs[0].text
 
-        # Clean up end of sentence token
-        if '<｜end▁of▁sentence｜>' in final_output:
-            final_output = final_output.replace('<｜end▁of▁sentence｜>', '')
+            # Clean up end of sentence token
+            if '<｜end▁of▁sentence｜>' in final_output:
+                final_output = final_output.replace('<｜end▁of▁sentence｜>', '')
 
-        return final_output
+            return final_output
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "errored" in error_msg or "background loop" in error_msg:
+                logger.error(f"[{request_id}] Engine background loop error detected: {e}")
+                manager.mark_errored()
+            raise
 
 
 async def async_generate_batch(
@@ -166,6 +182,10 @@ async def async_generate_batch(
     if not manager.is_initialized():
         raise RuntimeError("Engine not initialized. Call initialize() first.")
 
+    # Check if engine has errored
+    if manager.is_errored():
+        raise RuntimeError("Engine has errored. Restart required.")
+
     engine = manager.get_engine()
 
     if sampling_params is None:
@@ -176,14 +196,21 @@ async def async_generate_batch(
 
     async def generate_single(prompt: Dict[str, Any], idx: int) -> tuple:
         request_id = f"request-{int(time.time() * 1000)}-{idx}"
-        final_output = ""
-        async for request_output in engine.generate(prompt, sampling_params, request_id):
-            if request_output.outputs:
-                final_output = request_output.outputs[0].text
-        # Clean up end of sentence token
-        if '<｜end▁of▁sentence｜>' in final_output:
-            final_output = final_output.replace('<｜end▁of▁sentence｜>', '')
-        return idx, final_output
+        try:
+            final_output = ""
+            async for request_output in engine.generate(prompt, sampling_params, request_id):
+                if request_output.outputs:
+                    final_output = request_output.outputs[0].text
+            # Clean up end of sentence token
+            if '<｜end▁of▁sentence｜>' in final_output:
+                final_output = final_output.replace('<｜end▁of▁sentence｜>', '')
+            return idx, final_output
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "errored" in error_msg or "background loop" in error_msg:
+                logger.error(f"[{request_id}] Engine background loop error detected: {e}")
+                manager.mark_errored()
+            raise
 
     # Run all generations concurrently
     tasks = [generate_single(prompt, idx) for idx, prompt in enumerate(prompts)]
@@ -237,25 +264,40 @@ async def async_generate_single(
 
     Returns:
         Generated text output.
+
+    Raises:
+        RuntimeError: If engine is not initialized or has errored.
     """
     manager = EngineManager.get_instance()
 
     if not manager.is_initialized():
         raise RuntimeError("Engine not initialized. Call initialize() first.")
 
+    # Check if engine has errored
+    if manager.is_errored():
+        raise RuntimeError("Engine has errored. Restart required.")
+
     engine = manager.get_engine()
     semaphore = await get_inference_semaphore()
 
     async with semaphore:
         logger.debug(f"[{request_id}] Acquired semaphore, starting inference")
-        final_output = ""
-        async for request_output in engine.generate(prompt, sampling_params, request_id):
-            if request_output.outputs:
-                final_output = request_output.outputs[0].text
+        try:
+            final_output = ""
+            async for request_output in engine.generate(prompt, sampling_params, request_id):
+                if request_output.outputs:
+                    final_output = request_output.outputs[0].text
 
-        # Don't clean EOS token here - let caller check completion status first
-        logger.debug(f"[{request_id}] Inference complete, releasing semaphore")
-        return final_output
+            # Don't clean EOS token here - let caller check completion status first
+            logger.debug(f"[{request_id}] Inference complete, releasing semaphore")
+            return final_output
+        except Exception as e:
+            # Check if this is a "background loop errored" type error
+            error_msg = str(e).lower()
+            if "errored" in error_msg or "background loop" in error_msg:
+                logger.error(f"[{request_id}] Engine background loop error detected: {e}")
+                manager.mark_errored()
+            raise
 
 
 def prepare_image_input(

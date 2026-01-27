@@ -98,6 +98,51 @@ async def get_engine_status() -> EngineStatusResponse:
         mode=manager.get_mode(),
         model_path=settings.model_path if settings else None,
         gpu_memory_utilization=settings.gpu_memory_utilization if settings else None,
+        errored=manager.is_errored(),
+    )
+
+
+@router.post(
+    "/engine/restart",
+    response_model=EngineStatusResponse,
+    summary="Restart Engine",
+    description="Restart the inference engine after an error.",
+)
+async def restart_engine() -> EngineStatusResponse:
+    """
+    Restart the inference engine.
+
+    Use this endpoint to restart the engine after it has errored.
+    """
+    manager = EngineManager.get_instance()
+
+    if not manager.is_errored() and manager.is_initialized():
+        raise HTTPException(
+            status_code=400,
+            detail="Engine is running normally. No restart needed."
+        )
+
+    try:
+        success = manager.restart()
+        if not success:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to restart engine"
+            )
+    except Exception as e:
+        logger.error(f"Failed to restart engine: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to restart engine: {str(e)}"
+        )
+
+    settings = manager.get_settings()
+    return EngineStatusResponse(
+        initialized=manager.is_initialized(),
+        mode=manager.get_mode(),
+        model_path=settings.model_path if settings else None,
+        gpu_memory_utilization=settings.gpu_memory_utilization if settings else None,
+        errored=manager.is_errored(),
     )
 
 

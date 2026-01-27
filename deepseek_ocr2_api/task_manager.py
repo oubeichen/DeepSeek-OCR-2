@@ -332,8 +332,16 @@ class TaskManager:
                 logger.info(f"[Worker {worker_id}] Processing task {task_id}")
 
                 try:
-                    # Check engine
+                    # Check engine status and attempt restart if errored
                     manager = EngineManager.get_instance()
+                    if manager.is_errored():
+                        task.add_log("Engine error detected, attempting restart...")
+                        logger.warning(f"[Worker {worker_id}] Engine errored, attempting restart")
+                        if manager.restart():
+                            task.add_log("Engine restarted successfully")
+                        else:
+                            raise RuntimeError("Engine restart failed")
+
                     if not manager.is_initialized():
                         raise RuntimeError("Engine not initialized")
 

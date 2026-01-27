@@ -205,6 +205,10 @@ class EngineStatusResponse(BaseModel):
         default=None,
         description="GPU memory utilization setting"
     )
+    errored: bool = Field(
+        default=False,
+        description="Whether engine has errored and needs restart"
+    )
 
     class Config:
         json_schema_extra = {

@@ -48,6 +48,7 @@ class EngineManager:
                     cls._instance._mode = None
                     cls._instance._settings = None
                     cls._instance._processor = None
+                    cls._instance._engine_errored = False
         return cls._instance
 
     @classmethod
@@ -58,6 +59,26 @@ class EngineManager:
     def is_initialized(self) -> bool:
         """Check if the engine has been initialized."""
         return self._initialized and self._engine is not None
+
+    def is_errored(self) -> bool:
+        """Check if the engine has errored and needs restart."""
+        if not self._initialized or self._engine is None:
+            return False
+        # Check vLLM engine's internal error state
+        try:
+            if hasattr(self._engine, 'errored') and self._engine.errored:
+                return True
+            # Also check if the background loop has stopped
+            if hasattr(self._engine, 'is_running') and not self._engine.is_running:
+                return True
+        except Exception:
+            pass
+        return self._engine_errored
+
+    def mark_errored(self):
+        """Mark the engine as errored (called when inference fails)."""
+        self._engine_errored = True
+        logger.warning("Engine marked as errored")
 
     def get_mode(self) -> Optional[str]:
         """Get the current engine mode."""
@@ -186,7 +207,34 @@ class EngineManager:
                 self._initialized = False
                 self._mode = None
                 self._settings = None
+                self._engine_errored = False
                 logger.info("Engine shutdown complete.")
+
+    def restart(self) -> bool:
+        """
+        Restart the engine after an error.
+
+        Returns:
+            True if restart was successful, False otherwise.
+        """
+        logger.info("Attempting to restart engine...")
+        saved_settings = self._settings
+
+        try:
+            # Shutdown current engine
+            self.shutdown()
+
+            # Re-initialize with saved settings
+            if saved_settings:
+                self.initialize(saved_settings)
+                logger.info("Engine restarted successfully")
+                return True
+            else:
+                logger.error("Cannot restart: no saved settings")
+                return False
+        except Exception as e:
+            logger.error(f"Failed to restart engine: {e}", exc_info=True)
+            return False
 
     @classmethod
     def reset(cls) -> None:
