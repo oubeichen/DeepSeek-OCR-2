@@ -946,6 +946,19 @@
 
         function renderTasks(tasks) {
             const tasksList = document.getElementById('tasksList');
+            const logScrollStates = new Map();
+
+            document.querySelectorAll('.task-logs').forEach(logEl => {
+                const taskId = logEl.dataset.taskId;
+                if (!taskId) {
+                    return;
+                }
+                const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 10;
+                logScrollStates.set(taskId, {
+                    scrollTop: logEl.scrollTop,
+                    atBottom
+                });
+            });
 
             if (tasks.length === 0) {
                 tasksList.innerHTML = '<div class="no-tasks">暂无任务</div>';
@@ -992,7 +1005,7 @@
                             ${task.error_message ? `<div style="color: red;">错误: ${task.error_message}</div>` : ''}
                         </div>
                         ${paramsHtml}
-                        ${logs ? `<div class="task-logs">${logs}</div>` : ''}
+                        ${logs ? `<div class="task-logs" data-task-id="${task.task_id}">${logs}</div>` : ''}
                         <div class="btn-group">
                             <button class="btn btn-small btn-preview" onclick="openPreview('${task.task_id}', '${task.status}')">
                                 👁️ 预览
@@ -1012,7 +1025,13 @@
 
             requestAnimationFrame(() => {
                 document.querySelectorAll('.task-logs').forEach(logEl => {
-                    logEl.scrollTop = logEl.scrollHeight;
+                    const taskId = logEl.dataset.taskId;
+                    const prevState = taskId ? logScrollStates.get(taskId) : null;
+                    if (!prevState || prevState.atBottom) {
+                        logEl.scrollTop = logEl.scrollHeight;
+                        return;
+                    }
+                    logEl.scrollTop = prevState.scrollTop;
                 });
             });
         }
