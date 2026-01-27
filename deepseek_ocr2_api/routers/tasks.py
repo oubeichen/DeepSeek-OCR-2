@@ -323,7 +323,7 @@ async def preview_original(task_id: str):
     return FileResponse(
         path=task.input_file_path,
         media_type=mime_type,
-        filename=task.filename,
+        headers={"Content-Disposition": f"inline; filename=\"{task.filename}\""},
     )
 
 

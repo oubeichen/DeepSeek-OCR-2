@@ -76,6 +76,11 @@ def create_result_package(
         combined_md = "\n\n---\n\n".join(all_markdown)
         zipf.writestr("combined.md", combined_md)
 
+        # Also save combined markdown to output_dir for preview
+        combined_md_path = os.path.join(output_dir, "combined.md")
+        with open(combined_md_path, 'w', encoding='utf-8') as f:
+            f.write(combined_md)
+
         # Add metadata
         if include_metadata:
             metadata = {
@@ -142,6 +147,11 @@ def create_pdf_result_package(
         # Combined markdown
         combined_md = page_separator.join(all_markdown)
         zipf.writestr(f"{original_filename}.md", combined_md)
+
+        # Also save combined markdown to output_dir for preview
+        combined_md_path = os.path.join(output_dir, f"{original_filename}.md")
+        with open(combined_md_path, 'w', encoding='utf-8') as f:
+            f.write(combined_md)
 
         # Combined raw output
         if all_raw:
