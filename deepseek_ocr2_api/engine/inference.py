@@ -335,8 +335,8 @@ async def async_generate(
                 if request_output.outputs:
                     final_output = request_output.outputs[0].text
 
-            # Clean up end of sentence token
-            if '<｜end▁of▁sentence｜>' in final_output:
+            # Clean up end of sentence token unless caller explicitly wants it
+            if '<｜end▁of▁sentence｜>' in final_output and not getattr(sampling_params, "include_stop_str_in_output", False):
                 final_output = final_output.replace('<｜end▁of▁sentence｜>', '')
 
             return final_output
@@ -394,8 +394,8 @@ async def async_generate_batch(
             async for request_output in engine.generate(prompt, sampling_params, request_id):
                 if request_output.outputs:
                     final_output = request_output.outputs[0].text
-            # Clean up end of sentence token
-            if '<｜end▁of▁sentence｜>' in final_output:
+            # Clean up end of sentence token unless caller explicitly wants it
+            if '<｜end▁of▁sentence｜>' in final_output and not getattr(sampling_params, "include_stop_str_in_output", False):
                 final_output = final_output.replace('<｜end▁of▁sentence｜>', '')
             return idx, final_output
         except Exception as e:
