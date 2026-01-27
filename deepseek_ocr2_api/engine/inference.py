@@ -5,6 +5,7 @@ Provides unified inference interface for both sync and async modes.
 """
 
 import time
+import asyncio
 import logging
 from typing import Optional, List, Dict, Any, Union, AsyncGenerator
 
@@ -17,6 +18,10 @@ logger = logging.getLogger(__name__)
 
 # Import from DeepSeek-OCR2-vllm (path already set by manager.py)
 from process.ngram_norepeat import NoRepeatNGramLogitsProcessor
+
+# Global semaphore for fair scheduling across all tasks
+_inference_semaphore: Optional[asyncio.Semaphore] = None
+_semaphore_lock = asyncio.Lock()
 
 
 def create_sampling_params(
@@ -192,6 +197,68 @@ async def async_generate_batch(
     logger.info(f"Batch generation complete in {elapsed:.2f}s")
 
     return results
+
+
+async def get_inference_semaphore() -> asyncio.Semaphore:
+    """
+    Get or create the global inference semaphore.
+
+    The semaphore limits concurrent inference requests across all tasks,
+    enabling fair scheduling where smaller files can complete faster
+    even when larger files are being processed.
+    """
+    global _inference_semaphore
+
+    async with _semaphore_lock:
+        if _inference_semaphore is None:
+            settings = get_settings()
+            _inference_semaphore = asyncio.Semaphore(settings.inference_concurrency)
+            logger.info(f"Created inference semaphore with concurrency={settings.inference_concurrency}")
+        return _inference_semaphore
+
+
+async def async_generate_single(
+    prompt: Dict[str, Any],
+    sampling_params: SamplingParams,
+    request_id: str,
+) -> str:
+    """
+    Generate output for a single prompt with global semaphore for fair scheduling.
+
+    This function acquires a global semaphore before inference, ensuring that:
+    1. Total concurrent inference requests are limited
+    2. Pages from different files are processed fairly (round-robin style)
+    3. Smaller files can complete faster even when larger files are processing
+
+    Args:
+        prompt: Prompt dict with multi_modal_data.
+        sampling_params: Sampling parameters.
+        request_id: Unique request identifier.
+
+    Returns:
+        Generated text output.
+    """
+    manager = EngineManager.get_instance()
+
+    if not manager.is_initialized():
+        raise RuntimeError("Engine not initialized. Call initialize() first.")
+
+    engine = manager.get_engine()
+    semaphore = await get_inference_semaphore()
+
+    async with semaphore:
+        logger.debug(f"[{request_id}] Acquired semaphore, starting inference")
+        final_output = ""
+        async for request_output in engine.generate(prompt, sampling_params, request_id):
+            if request_output.outputs:
+                final_output = request_output.outputs[0].text
+
+        # Clean up end of sentence token
+        if '<｜end▁of▁sentence｜>' in final_output:
+            final_output = final_output.replace('<｜end▁of▁sentence｜>', '')
+
+        logger.debug(f"[{request_id}] Inference complete, releasing semaphore")
+        return final_output
 
 
 def prepare_image_input(

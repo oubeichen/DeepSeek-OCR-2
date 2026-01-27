@@ -1,7 +1,8 @@
 """
 Task manager for asynchronous OCR processing.
 
-Provides a queue-based task management system for the web interface.
+Provides a queue-based task management system with concurrent processing
+and fair scheduling across multiple files.
 """
 
 import asyncio
@@ -61,6 +62,10 @@ class OCRTask:
     output_dir: Optional[str] = None
     result_zip_path: Optional[str] = None
 
+    # Progress tracking
+    total_pages: int = 0
+    processed_pages: int = 0
+
     def add_log(self, message: str):
         """Add a log entry."""
         self.logs.append(TaskLog(
@@ -80,12 +85,19 @@ class OCRTask:
             "error_message": self.error_message,
             "logs": [{"timestamp": log.timestamp, "message": log.message} for log in self.logs],
             "ocr_params": self.ocr_params,
+            "total_pages": self.total_pages,
+            "processed_pages": self.processed_pages,
         }
 
 
 class TaskManager:
     """
-    Manages OCR tasks with a processing queue.
+    Manages OCR tasks with concurrent processing and fair scheduling.
+
+    Features:
+    - Multiple concurrent task workers (configurable via task_concurrent_files)
+    - Page-level fair scheduling via global inference semaphore
+    - Smaller files can complete faster even when larger files are processing
 
     Singleton pattern to ensure only one instance exists.
     """
@@ -97,7 +109,7 @@ class TaskManager:
         self.tasks: Dict[str, OCRTask] = {}
         self.queue: asyncio.Queue = asyncio.Queue()
         self._processing = False
-        self._worker_task: Optional[asyncio.Task] = None
+        self._worker_tasks: List[asyncio.Task] = []
         self._storage_dir = Path("/tmp/deepseek_ocr2_tasks")
         self._storage_dir.mkdir(parents=True, exist_ok=True)
 
@@ -184,30 +196,63 @@ class TaskManager:
         """Get the total number of tasks."""
         return len(self.tasks)
 
+    @property
+    def active_workers(self) -> int:
+        """Get the number of active workers."""
+        return sum(1 for t in self._worker_tasks if not t.done())
+
     def start_worker(self):
-        """Start the background worker."""
-        if self._worker_task is None or self._worker_task.done():
+        """Start the background workers."""
+        from .config import get_settings
+        settings = get_settings()
+
+        # Calculate number of workers based on concurrency settings
+        # At least 2 workers to allow fair scheduling between files
+        # At most inference_concurrency workers (no point having more)
+        num_workers = max(2, min(settings.inference_concurrency, 8))
+
+        if not self._processing:
             self._processing = True
-            self._worker_task = asyncio.create_task(self._process_queue())
-            logger.info("Task worker started")
+            # Clean up any done tasks
+            self._worker_tasks = [t for t in self._worker_tasks if not t.done()]
+
+            # Start workers up to the calculated limit
+            current_workers = len(self._worker_tasks)
+            for i in range(current_workers, num_workers):
+                worker_task = asyncio.create_task(self._process_queue(worker_id=i))
+                self._worker_tasks.append(worker_task)
+
+            logger.info(f"Started {num_workers} task workers")
 
     def stop_worker(self):
-        """Stop the background worker."""
+        """Stop all background workers."""
         self._processing = False
-        if self._worker_task:
-            self._worker_task.cancel()
-            logger.info("Task worker stopped")
+        for worker_task in self._worker_tasks:
+            worker_task.cancel()
+        self._worker_tasks.clear()
+        logger.info("All task workers stopped")
 
-    async def _process_queue(self):
-        """Background worker to process tasks."""
-        from .engine import EngineManager, async_generate_batch, prepare_image_input, prepare_batch_inputs, create_sampling_params
+    async def _process_queue(self, worker_id: int = 0):
+        """
+        Background worker to process tasks.
+
+        Each worker processes one task at a time, but uses the global
+        inference semaphore for fair page-level scheduling.
+        """
+        from .engine import (
+            EngineManager,
+            async_generate_single,
+            prepare_image_input,
+            prepare_batch_inputs,
+            create_sampling_params,
+        )
         from .config import get_settings
         from .processors.image import load_image
         from .processors.pdf import pdf_to_images, images_to_pdf
         from .processors.postprocess import process_output
         from .utils.packaging import create_result_package, create_pdf_result_package
 
-        logger.info("Task worker running...")
+        logger.info(f"Task worker {worker_id} running...")
 
         while self._processing:
             try:
@@ -219,12 +264,13 @@ class TaskManager:
 
                 task = self.tasks.get(task_id)
                 if not task:
+                    self.queue.task_done()
                     continue
 
                 # Update status
                 task.status = TaskStatus.PROCESSING
-                task.add_log("Processing started")
-                logger.info(f"Processing task {task_id}")
+                task.add_log(f"Processing started (worker {worker_id})")
+                logger.info(f"[Worker {worker_id}] Processing task {task_id}")
 
                 try:
                     # Check engine
@@ -257,7 +303,8 @@ class TaskManager:
                     skip_repeat_pages = params.get("skip_repeat_pages", settings.skip_repeat_pages)
 
                     if task.task_type == TaskType.IMAGE:
-                        # Process image
+                        # Process single image
+                        task.total_pages = 1
                         task.add_log("Loading image...")
                         image = load_image(task.input_file_path)
                         if image is None:
@@ -266,7 +313,7 @@ class TaskManager:
 
                         task.add_log(f"Image size: {image.size}")
 
-                        # Prepare input with all dynamic parameters
+                        # Prepare input
                         input_data = prepare_image_input(
                             image=image,
                             prompt=prompt,
@@ -277,7 +324,7 @@ class TaskManager:
                             max_crops=max_crops,
                         )
 
-                        # Create sampling params with all dynamic parameters
+                        # Create sampling params
                         sampling_params = create_sampling_params(
                             settings=settings,
                             temperature=temperature,
@@ -286,10 +333,13 @@ class TaskManager:
                             window_size=window_size,
                         )
 
-                        # Generate
+                        # Generate with fair scheduling
                         task.add_log("Running OCR inference...")
-                        outputs = await async_generate_batch([input_data], sampling_params, settings)
-                        output_text = outputs[0] if outputs else ""
+                        request_id = f"{task_id}-page-0"
+                        output_text = await async_generate_single(
+                            input_data, sampling_params, request_id
+                        )
+                        task.processed_pages = 1
 
                         task.add_log("Processing output...")
 
@@ -312,12 +362,14 @@ class TaskManager:
                         task.result_zip_path = zip_path
 
                     else:
-                        # Process PDF
+                        # Process PDF with page-level fair scheduling
                         task.add_log("Converting PDF to images...")
                         images = pdf_to_images(task.input_file_path, dpi=dpi)
+                        task.total_pages = len(images)
                         task.add_log(f"PDF has {len(images)} pages")
 
-                        # Prepare batch inputs with all dynamic parameters
+                        # Prepare batch inputs
+                        task.add_log("Preprocessing pages...")
                         batch_inputs = prepare_batch_inputs(
                             images=images,
                             prompt=prompt,
@@ -329,8 +381,7 @@ class TaskManager:
                             max_crops=max_crops,
                         )
 
-                        # Create sampling params with all dynamic parameters
-                        # For PDF, use smaller window_size (50) if not specified
+                        # Create sampling params
                         pdf_window_size = window_size if window_size is not None else 50
                         sampling_params = create_sampling_params(
                             settings=settings,
@@ -341,9 +392,37 @@ class TaskManager:
                             include_stop_str_in_output=True,
                         )
 
-                        # Generate
-                        task.add_log("Running OCR inference...")
-                        outputs = await async_generate_batch(batch_inputs, sampling_params, settings)
+                        # Generate each page with fair scheduling
+                        # Use per-file semaphore to limit concurrent pages from this file
+                        # This allows smaller files to "cut in line" and complete faster
+                        task.add_log("Running OCR inference (fair scheduling)...")
+
+                        # Per-file semaphore limits how many pages this file can process at once
+                        max_pages = settings.max_pages_per_file
+                        file_semaphore = asyncio.Semaphore(max_pages)
+
+                        async def process_page_with_limit(idx: int, input_data: Dict) -> tuple:
+                            """Process a single page with both file and global semaphores."""
+                            async with file_semaphore:
+                                # File semaphore acquired, now wait for global semaphore
+                                request_id = f"{task_id}-page-{idx}"
+                                result = await async_generate_single(
+                                    input_data, sampling_params, request_id
+                                )
+                                task.processed_pages += 1
+                                task.add_log(f"Page {idx + 1}/{len(images)} inference complete")
+                                return idx, result
+
+                        # Process pages concurrently but with both semaphores limiting
+                        page_tasks = [
+                            process_page_with_limit(idx, input_data)
+                            for idx, input_data in enumerate(batch_inputs)
+                        ]
+                        results_with_idx = await asyncio.gather(*page_tasks)
+
+                        # Sort by index and extract outputs
+                        results_with_idx.sort(key=lambda x: x[0])
+                        outputs = [r[1] for r in results_with_idx]
 
                         task.add_log("Processing outputs...")
 
@@ -352,6 +431,11 @@ class TaskManager:
                         annotated_images = []
 
                         for idx, (output_text, image) in enumerate(zip(outputs, images)):
+                            # Check for incomplete output
+                            if '<｜end▁of▁sentence｜>' not in output_text and skip_repeat_pages:
+                                task.add_log(f"Page {idx + 1} appears incomplete, skipping")
+                                continue
+
                             task.add_log(f"Processing page {idx + 1}/{len(images)}")
 
                             result = process_output(
@@ -373,7 +457,7 @@ class TaskManager:
                             annotated_pdf_path = os.path.join(task.output_dir, "annotated.pdf")
                             images_to_pdf(annotated_images, annotated_pdf_path)
 
-                        # Package results with dynamic page_separator
+                        # Package results
                         original_name = os.path.splitext(task.filename)[0]
                         zip_path = create_pdf_result_package(
                             results=results,
@@ -388,20 +472,20 @@ class TaskManager:
                     task.status = TaskStatus.COMPLETED
                     task.completed_at = datetime.now().isoformat()
                     task.add_log("Task completed successfully")
-                    logger.info(f"Task {task_id} completed")
+                    logger.info(f"[Worker {worker_id}] Task {task_id} completed")
 
                 except Exception as e:
                     task.status = TaskStatus.FAILED
                     task.error_message = str(e)
                     task.add_log(f"Error: {str(e)}")
-                    logger.error(f"Task {task_id} failed: {e}", exc_info=True)
+                    logger.error(f"[Worker {worker_id}] Task {task_id} failed: {e}", exc_info=True)
 
                 finally:
                     self.queue.task_done()
 
             except asyncio.CancelledError:
-                logger.info("Task worker cancelled")
+                logger.info(f"Task worker {worker_id} cancelled")
                 break
             except Exception as e:
-                logger.error(f"Worker error: {e}", exc_info=True)
+                logger.error(f"[Worker {worker_id}] Error: {e}", exc_info=True)
                 await asyncio.sleep(1)

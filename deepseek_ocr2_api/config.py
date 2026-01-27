@@ -219,6 +219,24 @@ class Settings(BaseSettings):
         description="Whether to cleanup temporary files after processing"
     )
 
+    # ====================
+    # Task Queue Settings
+    # ====================
+    inference_concurrency: int = Field(
+        default=4,
+        ge=1,
+        le=64,
+        description="Maximum concurrent inference requests (pages) across all tasks. "
+                    "Controls GPU utilization."
+    )
+    max_pages_per_file: int = Field(
+        default=2,
+        ge=1,
+        le=32,
+        description="Maximum concurrent pages per file. Limits how many pages from a single "
+                    "file can be processed at once, allowing smaller files to complete faster."
+    )
+
     # ==================
     # Whitelist Tokens
     # ==================
