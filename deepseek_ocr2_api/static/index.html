@@ -698,16 +698,6 @@
                                 <input type="number" id="maxCrops" value="6" min="1" max="12" step="1">
                                 <small style="color: #999;">最多裁剪块数量</small>
                             </div>
-                            <div class="config-item">
-                                <label for="imageSize">Image Size (局部视图尺寸)</label>
-                                <input type="number" id="imageSize" value="768" min="256" max="1536" step="64">
-                                <small style="color: #999;">裁剪块的目标尺寸</small>
-                            </div>
-                            <div class="config-item">
-                                <label for="baseSize">Base Size (全局视图尺寸)</label>
-                                <input type="number" id="baseSize" value="1024" min="512" max="2048" step="64">
-                                <small style="color: #999;">全局缩略图的基准尺寸</small>
-                            </div>
                         </div>
                     </div>
 
@@ -877,8 +867,6 @@
                 document.getElementById('cropMode').value = config.image_processing.crop_mode ? 'true' : 'false';
                 document.getElementById('minCrops').value = config.image_processing.min_crops ?? 2;
                 document.getElementById('maxCrops').value = config.image_processing.max_crops ?? 6;
-                document.getElementById('imageSize').value = config.image_processing.image_size ?? 768;
-                document.getElementById('baseSize').value = config.image_processing.base_size ?? 1024;
             }
 
             // PDF processing parameters
@@ -911,12 +899,6 @@
             }
             if (preset.max_crops !== undefined) {
                 document.getElementById('maxCrops').value = preset.max_crops;
-            }
-            if (preset.image_size !== undefined) {
-                document.getElementById('imageSize').value = preset.image_size;
-            }
-            if (preset.base_size !== undefined) {
-                document.getElementById('baseSize').value = preset.base_size;
             }
 
             // Update active button
@@ -951,9 +933,7 @@
                 image_processing: {
                     crop_mode: document.getElementById('cropMode').value,
                     min_crops: document.getElementById('minCrops').value,
-                    max_crops: document.getElementById('maxCrops').value,
-                    image_size: document.getElementById('imageSize').value,
-                    base_size: document.getElementById('baseSize').value
+                    max_crops: document.getElementById('maxCrops').value
                 },
                 pdf_processing: {
                     pdf_dpi: document.getElementById('dpi').value,
@@ -991,8 +971,6 @@
                     if (state.image_processing.crop_mode !== undefined) document.getElementById('cropMode').value = state.image_processing.crop_mode;
                     if (state.image_processing.min_crops !== undefined) document.getElementById('minCrops').value = state.image_processing.min_crops;
                     if (state.image_processing.max_crops !== undefined) document.getElementById('maxCrops').value = state.image_processing.max_crops;
-                    if (state.image_processing.image_size !== undefined) document.getElementById('imageSize').value = state.image_processing.image_size;
-                    if (state.image_processing.base_size !== undefined) document.getElementById('baseSize').value = state.image_processing.base_size;
                 }
                 if (state.pdf_processing) {
                     if (state.pdf_processing.pdf_dpi !== undefined) document.getElementById('dpi').value = state.pdf_processing.pdf_dpi;
@@ -1118,7 +1096,7 @@
 
         [
             'temperature', 'maxTokens', 'ngramSize', 'windowSize',
-            'cropMode', 'minCrops', 'maxCrops', 'imageSize', 'baseSize',
+            'cropMode', 'minCrops', 'maxCrops',
             'dpi', 'pageSeparator', 'skipRepeatPages', 'prompt', 'promptTemplate'
         ].forEach((id) => {
             const el = document.getElementById(id);
@@ -1271,8 +1249,7 @@
                 crop_mode: document.getElementById('cropMode').value === 'true',
                 min_crops: parseInt(document.getElementById('minCrops').value),
                 max_crops: parseInt(document.getElementById('maxCrops').value),
-                image_size: parseInt(document.getElementById('imageSize').value),
-                base_size: parseInt(document.getElementById('baseSize').value),
+                // Note: image_size (768) and base_size (1024) are fixed due to model constraints
                 // PDF processing parameters
                 dpi: parseInt(document.getElementById('dpi').value),
                 page_separator: document.getElementById('pageSeparator').value,

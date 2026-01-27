@@ -55,8 +55,7 @@ async def get_config():
             "crop_mode": settings.crop_mode,
             "min_crops": settings.min_crops,
             "max_crops": settings.max_crops,
-            "image_size": settings.image_size,
-            "base_size": settings.base_size,
+            # Note: image_size (768) and base_size (1024) are fixed due to model constraints
         },
         "pdf_processing": {
             "pdf_dpi": settings.pdf_dpi,
@@ -71,8 +70,6 @@ async def get_config():
                 "name": "快速模式",
                 "description": "速度优先，适合简单文档",
                 "crop_mode": False,
-                "image_size": 512,
-                "base_size": 512,
                 "min_crops": 1,
                 "max_crops": 4,
             },
@@ -80,8 +77,6 @@ async def get_config():
                 "name": "标准模式",
                 "description": "平衡速度和质量",
                 "crop_mode": True,
-                "image_size": 768,
-                "base_size": 1024,
                 "min_crops": 2,
                 "max_crops": 6,
             },
@@ -89,8 +84,6 @@ async def get_config():
                 "name": "高质量模式",
                 "description": "质量优先，适合复杂文档",
                 "crop_mode": True,
-                "image_size": 1024,
-                "base_size": 1280,
                 "min_crops": 2,
                 "max_crops": 9,
             },
@@ -138,8 +131,8 @@ async def upload_file(
     crop_mode: Optional[bool] = Form(default=None, description="Enable dynamic cropping", examples=[None]),
     min_crops: Optional[int] = Form(default=None, description="Minimum number of crops", examples=[None]),
     max_crops: Optional[int] = Form(default=None, description="Maximum number of crops", examples=[None]),
-    image_size: Optional[int] = Form(default=None, description="Local view image size", examples=[None]),
-    base_size: Optional[int] = Form(default=None, description="Global view base size", examples=[None]),
+    # Note: image_size and base_size are fixed at 768 and 1024 respectively
+    # due to model constraints (n_query must be 144 or 256)
     # PDF processing parameters
     dpi: Optional[int] = Form(default=None, description="PDF conversion DPI", examples=[None]),
     page_separator: Optional[str] = Form(default=None, description="Page separator in output (leave empty to use default)", examples=[""]),
@@ -205,10 +198,9 @@ async def upload_file(
         ocr_params["min_crops"] = min_crops
     if max_crops is not None:
         ocr_params["max_crops"] = max_crops
-    if image_size is not None:
-        ocr_params["image_size"] = image_size
-    if base_size is not None:
-        ocr_params["base_size"] = base_size
+    # Note: image_size and base_size are fixed at 768 and 1024 respectively
+    # due to model constraints (n_query must be 144 or 256)
+    # Any user-provided values are ignored
 
     # PDF processing parameters
     ocr_params["dpi"] = dpi if dpi is not None else settings.pdf_dpi

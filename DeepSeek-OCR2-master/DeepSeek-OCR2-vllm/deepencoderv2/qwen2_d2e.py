@@ -260,6 +260,11 @@ class Qwen2Decoder2Encoder(nn.Module):
             param_img = self.query_768.weight
         elif n_query == 256:
             param_img = self.query_1024.weight
+        else:
+            raise ValueError(
+                f"Unsupported n_query={n_query}. Expected 144 (for 768x768 images) or 256 (for 1024x1024 images). "
+                f"Input tensor shape: {x.shape}. Please ensure image_size=768 and base_size=1024."
+            )
 
         batch_query_imgs = param_img.unsqueeze(0).expand(
             bs, -1, -1
