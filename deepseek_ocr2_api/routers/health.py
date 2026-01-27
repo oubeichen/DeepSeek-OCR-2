@@ -147,6 +147,32 @@ async def restart_engine() -> EngineStatusResponse:
 
 
 @router.post(
+    "/engine/clear-error",
+    response_model=EngineStatusResponse,
+    summary="Clear Error Flag",
+    description="Clear the engine error flag without restarting. Use when error was incorrectly detected.",
+)
+async def clear_engine_error() -> EngineStatusResponse:
+    """
+    Clear the engine error flag.
+
+    Use this endpoint to clear the error flag if it was incorrectly set.
+    This does not restart the engine, just clears the error state.
+    """
+    manager = EngineManager.get_instance()
+    manager.clear_error()
+
+    settings = manager.get_settings()
+    return EngineStatusResponse(
+        initialized=manager.is_initialized(),
+        mode=manager.get_mode(),
+        model_path=settings.model_path if settings else None,
+        gpu_memory_utilization=settings.gpu_memory_utilization if settings else None,
+        errored=manager.is_errored(),
+    )
+
+
+@router.post(
     "/engine/initialize",
     response_model=EngineStatusResponse,
     summary="Initialize Engine",

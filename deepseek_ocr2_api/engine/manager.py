@@ -64,21 +64,19 @@ class EngineManager:
         """Check if the engine has errored and needs restart."""
         if not self._initialized or self._engine is None:
             return False
-        # Check vLLM engine's internal error state
-        try:
-            if hasattr(self._engine, 'errored') and self._engine.errored:
-                return True
-            # Also check if the background loop has stopped
-            if hasattr(self._engine, 'is_running') and not self._engine.is_running:
-                return True
-        except Exception:
-            pass
+        # Only check our own error flag, not vLLM's internal state
+        # vLLM's errored property can be unreliable after restart
         return self._engine_errored
 
     def mark_errored(self):
         """Mark the engine as errored (called when inference fails)."""
         self._engine_errored = True
         logger.warning("Engine marked as errored")
+
+    def clear_error(self):
+        """Clear the error flag after successful restart."""
+        self._engine_errored = False
+        logger.info("Engine error flag cleared")
 
     def get_mode(self) -> Optional[str]:
         """Get the current engine mode."""
@@ -227,6 +225,8 @@ class EngineManager:
             # Re-initialize with saved settings
             if saved_settings:
                 self.initialize(saved_settings)
+                # Clear error flag after successful restart
+                self.clear_error()
                 logger.info("Engine restarted successfully")
                 return True
             else:
