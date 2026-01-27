@@ -4,7 +4,6 @@ Inference module for DeepSeek-OCR-2 API Server.
 Provides unified inference interface for both sync and async modes.
 """
 
-import asyncio
 import time
 import logging
 from typing import Optional, List, Dict, Any, Union, AsyncGenerator
@@ -18,29 +17,6 @@ logger = logging.getLogger(__name__)
 
 # Import from DeepSeek-OCR2-vllm (path already set by manager.py)
 from process.ngram_norepeat import NoRepeatNGramLogitsProcessor
-
-# Global semaphore for controlling concurrent inference requests
-# This ensures fair scheduling between different tasks (e.g., small files vs large PDFs)
-_inference_semaphore: Optional[asyncio.Semaphore] = None
-_semaphore_lock = asyncio.Lock()
-
-
-async def get_inference_semaphore() -> asyncio.Semaphore:
-    """Get or create the global inference semaphore."""
-    global _inference_semaphore
-    if _inference_semaphore is None:
-        async with _semaphore_lock:
-            if _inference_semaphore is None:
-                settings = get_settings()
-                _inference_semaphore = asyncio.Semaphore(settings.max_concurrent_inferences)
-                logger.info(f"Initialized inference semaphore with limit={settings.max_concurrent_inferences}")
-    return _inference_semaphore
-
-
-def reset_inference_semaphore():
-    """Reset the inference semaphore (for testing or reconfiguration)."""
-    global _inference_semaphore
-    _inference_semaphore = None
 
 
 def create_sampling_params(
@@ -170,10 +146,6 @@ async def async_generate_batch(
     """
     Batch asynchronous generation using AsyncLLMEngine.
 
-    Uses a global semaphore to limit concurrent inference requests,
-    ensuring fair scheduling between different tasks (e.g., a small
-    single-image task won't be blocked by a large PDF with many pages).
-
     Args:
         prompts: List of prompt dicts with multi_modal_data.
         sampling_params: Sampling parameters. If None, creates default.
@@ -182,6 +154,8 @@ async def async_generate_batch(
     Returns:
         List of generated text outputs.
     """
+    import asyncio
+
     manager = EngineManager.get_instance()
 
     if not manager.is_initialized():
@@ -195,24 +169,18 @@ async def async_generate_batch(
     logger.info(f"Starting async batch generation for {len(prompts)} prompt(s)...")
     start_time = time.time()
 
-    # Get the global semaphore for fair scheduling
-    semaphore = await get_inference_semaphore()
-
     async def generate_single(prompt: Dict[str, Any], idx: int) -> tuple:
-        # Acquire semaphore before starting inference
-        # This ensures fair scheduling - other tasks can interleave
-        async with semaphore:
-            request_id = f"request-{int(time.time() * 1000)}-{idx}"
-            final_output = ""
-            async for request_output in engine.generate(prompt, sampling_params, request_id):
-                if request_output.outputs:
-                    final_output = request_output.outputs[0].text
-            # Clean up end of sentence token
-            if '<｜end▁of▁sentence｜>' in final_output:
-                final_output = final_output.replace('<｜end▁of▁sentence｜>', '')
-            return idx, final_output
+        request_id = f"request-{int(time.time() * 1000)}-{idx}"
+        final_output = ""
+        async for request_output in engine.generate(prompt, sampling_params, request_id):
+            if request_output.outputs:
+                final_output = request_output.outputs[0].text
+        # Clean up end of sentence token
+        if '<｜end▁of▁sentence｜>' in final_output:
+            final_output = final_output.replace('<｜end▁of▁sentence｜>', '')
+        return idx, final_output
 
-    # Run all generations concurrently (semaphore controls actual parallelism)
+    # Run all generations concurrently
     tasks = [generate_single(prompt, idx) for idx, prompt in enumerate(prompts)]
     results_with_idx = await asyncio.gather(*tasks)
 
