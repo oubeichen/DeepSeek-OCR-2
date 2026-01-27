@@ -1069,8 +1069,13 @@
                 return '';
             }
             let text = markdownText
-                .replace(/\\\[((?:.|\n)*?)\\\]/g, '$$\n$1\n$$')
-                .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$$');
+                .replace(/\\\(([\s\S]*?)\\\)/g, (match, content) => `$${content}$`);
+
+            text = text.replace(/(^|\n)\s*\\\[\s*([\s\S]*?)\s*\\\]\s*(?=\n|$)/g, (match, lead, content) => {
+                return `${lead}$$\n${content}\n$$`;
+            });
+
+            text = text.replace(/\\\[/g, '[').replace(/\\\]/g, ']');
 
             const lines = text.split(/\r?\n/);
             const normalizedLines = lines.map((line) => {
