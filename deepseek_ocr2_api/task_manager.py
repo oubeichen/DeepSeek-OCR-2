@@ -97,7 +97,7 @@ class TaskManager:
         self.tasks: Dict[str, OCRTask] = {}
         self.queue: asyncio.Queue = asyncio.Queue()
         self._processing = False
-        self._worker_tasks: List[asyncio.Task] = []
+        self._worker_task: Optional[asyncio.Task] = None
         self._storage_dir = Path("/tmp/deepseek_ocr2_tasks")
         self._storage_dir.mkdir(parents=True, exist_ok=True)
 
@@ -184,43 +184,21 @@ class TaskManager:
         """Get the total number of tasks."""
         return len(self.tasks)
 
-    def start_worker(self, num_workers: Optional[int] = None):
-        """Start the background workers.
-
-        Args:
-            num_workers: Number of concurrent workers. If None, uses config value.
-        """
-        from .config import get_settings
-
-        if num_workers is None:
-            num_workers = get_settings().task_workers
-
-        # Clean up any finished workers
-        self._worker_tasks = [t for t in self._worker_tasks if not t.done()]
-
-        # Start workers if not enough running
-        current_count = len(self._worker_tasks)
-        if current_count < num_workers:
+    def start_worker(self):
+        """Start the background worker."""
+        if self._worker_task is None or self._worker_task.done():
             self._processing = True
-            for i in range(current_count, num_workers):
-                worker_task = asyncio.create_task(self._process_queue(worker_id=i))
-                self._worker_tasks.append(worker_task)
-            logger.info(f"Started {num_workers - current_count} task worker(s), total: {num_workers}")
+            self._worker_task = asyncio.create_task(self._process_queue())
+            logger.info("Task worker started")
 
     def stop_worker(self):
-        """Stop all background workers."""
+        """Stop the background worker."""
         self._processing = False
-        for task in self._worker_tasks:
-            task.cancel()
-        self._worker_tasks.clear()
-        logger.info("All task workers stopped")
+        if self._worker_task:
+            self._worker_task.cancel()
+            logger.info("Task worker stopped")
 
-    @property
-    def active_workers(self) -> int:
-        """Get the number of active workers."""
-        return len([t for t in self._worker_tasks if not t.done()])
-
-    async def _process_queue(self, worker_id: int = 0):
+    async def _process_queue(self):
         """Background worker to process tasks."""
         from .engine import EngineManager, async_generate_batch, prepare_image_input, prepare_batch_inputs, create_sampling_params
         from .config import get_settings
@@ -229,7 +207,7 @@ class TaskManager:
         from .processors.postprocess import process_output
         from .utils.packaging import create_result_package, create_pdf_result_package
 
-        logger.info(f"Task worker {worker_id} running...")
+        logger.info("Task worker running...")
 
         while self._processing:
             try:
@@ -245,8 +223,8 @@ class TaskManager:
 
                 # Update status
                 task.status = TaskStatus.PROCESSING
-                task.add_log(f"Processing started (worker {worker_id})")
-                logger.info(f"[Worker {worker_id}] Processing task {task_id}")
+                task.add_log("Processing started")
+                logger.info(f"Processing task {task_id}")
 
                 try:
                     # Check engine
@@ -410,20 +388,20 @@ class TaskManager:
                     task.status = TaskStatus.COMPLETED
                     task.completed_at = datetime.now().isoformat()
                     task.add_log("Task completed successfully")
-                    logger.info(f"[Worker {worker_id}] Task {task_id} completed")
+                    logger.info(f"Task {task_id} completed")
 
                 except Exception as e:
                     task.status = TaskStatus.FAILED
                     task.error_message = str(e)
                     task.add_log(f"Error: {str(e)}")
-                    logger.error(f"[Worker {worker_id}] Task {task_id} failed: {e}", exc_info=True)
+                    logger.error(f"Task {task_id} failed: {e}", exc_info=True)
 
                 finally:
                     self.queue.task_done()
 
             except asyncio.CancelledError:
-                logger.info(f"Task worker {worker_id} cancelled")
+                logger.info("Task worker cancelled")
                 break
             except Exception as e:
-                logger.error(f"[Worker {worker_id}] Worker error: {e}", exc_info=True)
+                logger.error(f"Worker error: {e}", exc_info=True)
                 await asyncio.sleep(1)
