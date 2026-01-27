@@ -101,9 +101,13 @@ async def async_generate(
     if not manager.is_initialized():
         raise RuntimeError("Engine not initialized. Call initialize() first.")
 
-    # Check if engine has errored
+    # Check if engine has errored and attempt restart
     if manager.is_errored():
-        raise RuntimeError("Engine has errored. Restart required.")
+        logger.warning("Engine errored, attempting restart...")
+        if manager.restart():
+            logger.info("Engine restarted successfully")
+        else:
+            raise RuntimeError("Engine has errored and restart failed.")
 
     engine = manager.get_engine()
 
@@ -182,9 +186,13 @@ async def async_generate_batch(
     if not manager.is_initialized():
         raise RuntimeError("Engine not initialized. Call initialize() first.")
 
-    # Check if engine has errored
+    # Check if engine has errored and attempt restart
     if manager.is_errored():
-        raise RuntimeError("Engine has errored. Restart required.")
+        logger.warning("Engine errored, attempting restart...")
+        if manager.restart():
+            logger.info("Engine restarted successfully")
+        else:
+            raise RuntimeError("Engine has errored and restart failed.")
 
     engine = manager.get_engine()
 
@@ -266,16 +274,20 @@ async def async_generate_single(
         Generated text output.
 
     Raises:
-        RuntimeError: If engine is not initialized or has errored.
+        RuntimeError: If engine is not initialized or restart fails.
     """
     manager = EngineManager.get_instance()
 
     if not manager.is_initialized():
         raise RuntimeError("Engine not initialized. Call initialize() first.")
 
-    # Check if engine has errored
+    # Check if engine has errored and attempt restart
     if manager.is_errored():
-        raise RuntimeError("Engine has errored. Restart required.")
+        logger.warning(f"[{request_id}] Engine errored, attempting restart...")
+        if manager.restart():
+            logger.info(f"[{request_id}] Engine restarted successfully")
+        else:
+            raise RuntimeError("Engine has errored and restart failed.")
 
     engine = manager.get_engine()
     semaphore = await get_inference_semaphore()
