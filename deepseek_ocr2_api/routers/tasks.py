@@ -12,7 +12,8 @@ Provides endpoints for:
 import os
 import mimetypes
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict
+from functools import lru_cache
 
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
@@ -24,6 +25,10 @@ from ..config import get_settings
 from ..utils import unescape_string
 
 logger = logging.getLogger(__name__)
+
+# Cache for task markdown content (task_id -> markdown_content)
+# Cleared when task is deleted
+_markdown_cache: Dict[str, str] = {}
 
 router = APIRouter(prefix="/api", tags=["Tasks"])
 
@@ -277,6 +282,9 @@ async def delete_task(task_id: str):
     if not manager.delete_task(task_id):
         raise HTTPException(status_code=404, detail="Task not found")
 
+    # Clear cache
+    _markdown_cache.pop(task_id, None)
+
     return {"success": True, "message": f"Task {task_id} deleted"}
 
 
@@ -440,6 +448,7 @@ async def preview_result(task_id: str):
     Preview the OCR result as rendered HTML.
 
     Renders the markdown content as HTML for display in an iframe.
+    Uses in-memory cache to avoid repeated file reads.
     """
     import zipfile
     
@@ -452,33 +461,40 @@ async def preview_result(task_id: str):
     if task.status != TaskStatus.COMPLETED:
         raise HTTPException(status_code=400, detail="Task not completed")
 
-    # Get markdown content
-    md_content = None
-    
-    # First: try output directory (no extra resource needed)
-    if task.output_dir and os.path.exists(task.output_dir):
-        md_files = list(Path(task.output_dir).glob("*.md"))
-        if md_files:
-            md_content = md_files[0].read_text(encoding="utf-8")
-    
-    # Second: try result file
-    if not md_content and task.result_zip_path and os.path.exists(task.result_zip_path):
-        result_path = task.result_zip_path
-        ext = os.path.splitext(result_path)[1].lower()
+    # Check cache first
+    if task_id in _markdown_cache:
+        md_content = _markdown_cache[task_id]
+    else:
+        # Get markdown content
+        md_content = None
         
-        if ext == ".md":
-            # Direct markdown file
-            with open(result_path, 'r', encoding='utf-8') as f:
-                md_content = f.read()
-        elif ext == ".zip":
-            # Extract from ZIP (more resource intensive)
-            with zipfile.ZipFile(result_path, 'r') as zf:
-                md_files = [n for n in zf.namelist() if n.endswith('.md') and not n.endswith('_raw.md')]
-                if md_files:
-                    md_content = zf.read(md_files[0]).decode('utf-8')
-    
-    if not md_content:
-        raise HTTPException(status_code=404, detail="No markdown result found")
+        # First: try output directory (no extra resource needed)
+        if task.output_dir and os.path.exists(task.output_dir):
+            md_files = list(Path(task.output_dir).glob("*.md"))
+            if md_files:
+                md_content = md_files[0].read_text(encoding="utf-8")
+        
+        # Second: try result file
+        if not md_content and task.result_zip_path and os.path.exists(task.result_zip_path):
+            result_path = task.result_zip_path
+            ext = os.path.splitext(result_path)[1].lower()
+            
+            if ext == ".md":
+                # Direct markdown file
+                with open(result_path, 'r', encoding='utf-8') as f:
+                    md_content = f.read()
+            elif ext == ".zip":
+                # Extract from ZIP (more resource intensive)
+                with zipfile.ZipFile(result_path, 'r') as zf:
+                    md_files = [n for n in zf.namelist() if n.endswith('.md') and not n.endswith('_raw.md')]
+                    if md_files:
+                        md_content = zf.read(md_files[0]).decode('utf-8')
+        
+        if not md_content:
+            raise HTTPException(status_code=404, detail="No markdown result found")
+        
+        # Store in cache
+        _markdown_cache[task_id] = md_content
 
     # Render as HTML with basic styling
     html_content = f"""
