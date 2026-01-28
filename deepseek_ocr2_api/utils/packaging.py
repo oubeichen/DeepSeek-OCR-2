@@ -32,7 +32,7 @@ def create_result_package(
         output_dir: Directory containing result files.
         package_name: Optional name for the ZIP file.
         include_metadata: Whether to include metadata JSON.
-        include_raw_output: Whether to include raw model output in document.json.
+        include_raw_output: Whether to include raw model output in doc.json.
 
     Returns:
         Path to the created ZIP file.
@@ -43,7 +43,7 @@ def create_result_package(
 
     zip_path = os.path.join(output_dir, f"{package_name}.zip")
 
-    # Build document.json structure
+    # Build doc.json structure
     document_data = {
         "created_at": datetime.now().isoformat(),
         "total_pages": len(results),
@@ -84,7 +84,7 @@ def create_result_package(
                     zipf.write(img_path, arcname)
                     extracted_arcnames.append(arcname)
 
-            # Build page data for document.json
+            # Build page data for doc.json
             page_data = {
                 "page_index": idx,
                 "annotated_image": annotated_arcname,
@@ -106,12 +106,12 @@ def create_result_package(
         with open(combined_md_path, 'w', encoding='utf-8') as f:
             f.write(combined_md)
 
-        # Add document.json
+        # Add doc.json
         document_json_content = json.dumps(document_data, indent=2, ensure_ascii=False)
-        zipf.writestr("document.json", document_json_content)
+        zipf.writestr("doc.json", document_json_content)
 
-        # Also save document.json to output_dir for preview/access
-        document_json_path = os.path.join(output_dir, "document.json")
+        # Also save doc.json to output_dir for preview/access
+        document_json_path = os.path.join(output_dir, "doc.json")
         with open(document_json_path, 'w', encoding='utf-8') as f:
             f.write(document_json_content)
 
@@ -123,7 +123,7 @@ def create_result_package(
                 "files": {
                     "markdown": [f"page_{i}.md" for i in range(len(results))],
                     "combined": "combined.md",
-                    "document_json": "document.json",
+                    "document_json": "doc.json",
                     "annotated": [f"annotated/page_{i}.jpg" for i in range(len(results))
                                  if results[i].get("annotated_image_path")],
                     "images": []
@@ -159,7 +159,7 @@ def create_pdf_result_package(
         annotated_pdf_path: Path to annotated PDF if generated.
         original_filename: Original PDF filename (without extension).
         page_separator: Separator between pages.
-        include_raw_output: Whether to include raw model output in document.json.
+        include_raw_output: Whether to include raw model output in doc.json.
 
     Returns:
         Path to the created ZIP file.
@@ -168,7 +168,7 @@ def create_pdf_result_package(
     package_name = f"{original_filename}_{timestamp}"
     zip_path = os.path.join(output_dir, f"{package_name}.zip")
 
-    # Build document.json structure
+    # Build doc.json structure
     document_data = {
         "created_at": datetime.now().isoformat(),
         "original_filename": original_filename,
@@ -204,7 +204,7 @@ def create_pdf_result_package(
                 annotated_arcname = f"annotated/page_{idx}.jpg"
                 zipf.write(annotated_image, annotated_arcname)
 
-            # Build page data for document.json
+            # Build page data for doc.json
             page_data = {
                 "page_index": idx,
                 "annotated_image": annotated_arcname,
@@ -243,12 +243,12 @@ def create_pdf_result_package(
                 if os.path.isfile(img_path):
                     zipf.write(img_path, f"images/{img_file}")
 
-        # Add document.json
+        # Add doc.json
         document_json_content = json.dumps(document_data, indent=2, ensure_ascii=False)
-        zipf.writestr("document.json", document_json_content)
+        zipf.writestr("doc.json", document_json_content)
 
-        # Also save document.json to output_dir for preview/access
-        document_json_path = os.path.join(output_dir, "document.json")
+        # Also save doc.json to output_dir for preview/access
+        document_json_path = os.path.join(output_dir, "doc.json")
         with open(document_json_path, 'w', encoding='utf-8') as f:
             f.write(document_json_content)
 
@@ -259,7 +259,7 @@ def create_pdf_result_package(
             "total_pages": len(results),
             "files": {
                 "markdown": f"{original_filename}.md",
-                "document_json": "document.json",
+                "document_json": "doc.json",
                 "annotated_pdf": f"{original_filename}_annotated.pdf" if annotated_pdf_path else None,
                 "images_dir": "images/"
             }
