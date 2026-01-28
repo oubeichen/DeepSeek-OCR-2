@@ -452,10 +452,17 @@ async def preview_result(task_id: str):
     if task.status != TaskStatus.COMPLETED:
         raise HTTPException(status_code=400, detail="Task not completed")
 
-    # Get markdown content from result file
+    # Get markdown content
     md_content = None
     
-    if task.result_zip_path and os.path.exists(task.result_zip_path):
+    # First: try output directory (no extra resource needed)
+    if task.output_dir and os.path.exists(task.output_dir):
+        md_files = list(Path(task.output_dir).glob("*.md"))
+        if md_files:
+            md_content = md_files[0].read_text(encoding="utf-8")
+    
+    # Second: try result file
+    if not md_content and task.result_zip_path and os.path.exists(task.result_zip_path):
         result_path = task.result_zip_path
         ext = os.path.splitext(result_path)[1].lower()
         
@@ -464,17 +471,11 @@ async def preview_result(task_id: str):
             with open(result_path, 'r', encoding='utf-8') as f:
                 md_content = f.read()
         elif ext == ".zip":
-            # Extract from ZIP
+            # Extract from ZIP (more resource intensive)
             with zipfile.ZipFile(result_path, 'r') as zf:
                 md_files = [n for n in zf.namelist() if n.endswith('.md') and not n.endswith('_raw.md')]
                 if md_files:
                     md_content = zf.read(md_files[0]).decode('utf-8')
-    
-    # Fallback: look in output directory
-    if not md_content and task.output_dir and os.path.exists(task.output_dir):
-        md_files = list(Path(task.output_dir).glob("*.md"))
-        if md_files:
-            md_content = md_files[0].read_text(encoding="utf-8")
     
     if not md_content:
         raise HTTPException(status_code=404, detail="No markdown result found")
