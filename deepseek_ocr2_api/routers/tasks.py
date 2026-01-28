@@ -316,6 +316,93 @@ async def download_result(task_id: str):
         )
 
 
+@router.get("/tasks/{task_id}/markdown")
+async def get_task_markdown(task_id: str):
+    """Get markdown content for a completed task.
+    
+    Works regardless of the original result_format setting.
+    If the task was saved as ZIP, extracts markdown from the archive.
+    """
+    import zipfile
+    
+    manager = get_task_manager()
+    task = manager.get_task(task_id)
+
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task.status != TaskStatus.COMPLETED:
+        raise HTTPException(status_code=400, detail="Task not completed")
+
+    if not task.result_zip_path or not os.path.exists(task.result_zip_path):
+        raise HTTPException(status_code=404, detail="Result file not found")
+
+    result_path = task.result_zip_path
+    ext = os.path.splitext(result_path)[1].lower()
+
+    # If already markdown file, return directly
+    if ext == ".md":
+        with open(result_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return Response(content=content, media_type="text/markdown; charset=utf-8")
+
+    # If ZIP, extract markdown from archive
+    if ext == ".zip":
+        with zipfile.ZipFile(result_path, 'r') as zf:
+            # Find markdown file in archive
+            md_files = [n for n in zf.namelist() if n.endswith('.md') and not n.endswith('_raw.md')]
+            if not md_files:
+                raise HTTPException(status_code=404, detail="No markdown file in archive")
+            # Use the first non-raw markdown file
+            md_name = md_files[0]
+            content = zf.read(md_name).decode('utf-8')
+            return Response(content=content, media_type="text/markdown; charset=utf-8")
+
+    raise HTTPException(status_code=400, detail="Cannot extract markdown from this result format")
+
+
+@router.get("/tasks/{task_id}/json")
+async def get_task_json(task_id: str):
+    """Get doc.json content for a completed task.
+    
+    Works regardless of the original result_format setting.
+    If the task was saved as ZIP, extracts doc.json from the archive.
+    """
+    import zipfile
+    import json
+    
+    manager = get_task_manager()
+    task = manager.get_task(task_id)
+
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task.status != TaskStatus.COMPLETED:
+        raise HTTPException(status_code=400, detail="Task not completed")
+
+    if not task.result_zip_path or not os.path.exists(task.result_zip_path):
+        raise HTTPException(status_code=404, detail="Result file not found")
+
+    result_path = task.result_zip_path
+    ext = os.path.splitext(result_path)[1].lower()
+
+    # If already JSON file, return directly
+    if ext == ".json":
+        with open(result_path, 'r', encoding='utf-8') as f:
+            content = json.load(f)
+        return JSONResponse(content=content)
+
+    # If ZIP, extract doc.json from archive
+    if ext == ".zip":
+        with zipfile.ZipFile(result_path, 'r') as zf:
+            if "doc.json" not in zf.namelist():
+                raise HTTPException(status_code=404, detail="No doc.json in archive")
+            content = json.loads(zf.read("doc.json").decode('utf-8'))
+            return JSONResponse(content=content)
+
+    raise HTTPException(status_code=400, detail="Cannot extract JSON from this result format")
+
+
 @router.get("/tasks/{task_id}/preview/original")
 async def preview_original(task_id: str):
     """Preview the original uploaded file."""
