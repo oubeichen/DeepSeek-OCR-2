@@ -441,6 +441,8 @@ async def preview_result(task_id: str):
 
     Renders the markdown content as HTML for display in an iframe.
     """
+    import zipfile
+    
     manager = get_task_manager()
     task = manager.get_task(task_id)
 
@@ -450,17 +452,32 @@ async def preview_result(task_id: str):
     if task.status != TaskStatus.COMPLETED:
         raise HTTPException(status_code=400, detail="Task not completed")
 
-    # Find markdown file in output directory
-    if not task.output_dir or not os.path.exists(task.output_dir):
-        raise HTTPException(status_code=404, detail="Output directory not found")
-
-    # Look for markdown files
-    md_files = list(Path(task.output_dir).glob("*.md"))
-    if not md_files:
+    # Get markdown content from result file
+    md_content = None
+    
+    if task.result_zip_path and os.path.exists(task.result_zip_path):
+        result_path = task.result_zip_path
+        ext = os.path.splitext(result_path)[1].lower()
+        
+        if ext == ".md":
+            # Direct markdown file
+            with open(result_path, 'r', encoding='utf-8') as f:
+                md_content = f.read()
+        elif ext == ".zip":
+            # Extract from ZIP
+            with zipfile.ZipFile(result_path, 'r') as zf:
+                md_files = [n for n in zf.namelist() if n.endswith('.md') and not n.endswith('_raw.md')]
+                if md_files:
+                    md_content = zf.read(md_files[0]).decode('utf-8')
+    
+    # Fallback: look in output directory
+    if not md_content and task.output_dir and os.path.exists(task.output_dir):
+        md_files = list(Path(task.output_dir).glob("*.md"))
+        if md_files:
+            md_content = md_files[0].read_text(encoding="utf-8")
+    
+    if not md_content:
         raise HTTPException(status_code=404, detail="No markdown result found")
-
-    # Read the first markdown file
-    md_content = md_files[0].read_text(encoding="utf-8")
 
     # Render as HTML with basic styling
     html_content = f"""
