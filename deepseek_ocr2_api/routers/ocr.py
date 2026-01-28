@@ -11,7 +11,7 @@ import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, JSONResponse
 from PIL import Image as PILImage
 
 from ..config import get_settings
@@ -193,12 +193,21 @@ async def ocr_image(
         background_tasks.add_task(cleanup_temp_files, [temp_dir], True)
 
         # Return result in requested format
-        return FileResponse(
-            path=package_result.path,
-            media_type=package_result.media_type,
-            filename=package_result.filename,
-            background=background_tasks,
-        )
+        if result_format == ResultFormat.MARKDOWN:
+            with open(package_result.path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            return Response(content=content, media_type="text/markdown; charset=utf-8")
+        elif result_format == ResultFormat.JSON:
+            with open(package_result.path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            return Response(content=content, media_type="application/json")
+        else:
+            return FileResponse(
+                path=package_result.path,
+                media_type=package_result.media_type,
+                filename=package_result.filename,
+                background=background_tasks,
+            )
 
     except HTTPException:
         if temp_dir:
@@ -373,12 +382,21 @@ async def ocr_pdf(
         background_tasks.add_task(cleanup_temp_files, [temp_dir], True)
 
         # Return result in requested format
-        return FileResponse(
-            path=package_result.path,
-            media_type=package_result.media_type,
-            filename=package_result.filename,
-            background=background_tasks,
-        )
+        if result_format == ResultFormat.MARKDOWN:
+            with open(package_result.path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            return Response(content=content, media_type="text/markdown; charset=utf-8")
+        elif result_format == ResultFormat.JSON:
+            with open(package_result.path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            return Response(content=content, media_type="application/json")
+        else:
+            return FileResponse(
+                path=package_result.path,
+                media_type=package_result.media_type,
+                filename=package_result.filename,
+                background=background_tasks,
+            )
 
     except HTTPException:
         if temp_dir:
@@ -536,12 +554,21 @@ async def ocr_batch(
         background_tasks.add_task(cleanup_temp_files, [temp_dir], True)
 
         # Return result in requested format
-        return FileResponse(
-            path=package_result.path,
-            media_type=package_result.media_type,
-            filename=package_result.filename,
-            background=background_tasks,
-        )
+        if result_format == ResultFormat.MARKDOWN:
+            with open(package_result.path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            return Response(content=content, media_type="text/markdown; charset=utf-8")
+        elif result_format == ResultFormat.JSON:
+            with open(package_result.path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            return Response(content=content, media_type="application/json")
+        else:
+            return FileResponse(
+                path=package_result.path,
+                media_type=package_result.media_type,
+                filename=package_result.filename,
+                background=background_tasks,
+            )
 
     except HTTPException:
         if temp_dir:

@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 import aiofiles
 import logging
 
@@ -295,27 +295,25 @@ async def download_result(task_id: str):
     if not task.result_zip_path or not os.path.exists(task.result_zip_path):
         raise HTTPException(status_code=404, detail="Result file not found")
 
-    # Determine media type based on file extension
+    # Determine response type based on file extension
     result_path = task.result_zip_path
     ext = os.path.splitext(result_path)[1].lower()
-    if ext == ".zip":
-        media_type = "application/zip"
-        filename = f"{task.task_id}.zip"
-    elif ext == ".md":
-        media_type = "text/markdown; charset=utf-8"
-        filename = f"{task.task_id}.md"
-    elif ext == ".json":
-        media_type = "application/json"
-        filename = f"{task.task_id}.json"
-    else:
-        media_type = "application/octet-stream"
-        filename = os.path.basename(result_path)
 
-    return FileResponse(
-        path=result_path,
-        media_type=media_type,
-        filename=filename,
-    )
+    if ext == ".md":
+        with open(result_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return Response(content=content, media_type="text/markdown; charset=utf-8")
+    elif ext == ".json":
+        with open(result_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return Response(content=content, media_type="application/json")
+    else:
+        # ZIP or other binary files
+        return FileResponse(
+            path=result_path,
+            media_type="application/zip",
+            filename=f"{task.task_id}.zip",
+        )
 
 
 @router.get("/tasks/{task_id}/preview/original")
