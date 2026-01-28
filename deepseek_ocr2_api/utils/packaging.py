@@ -10,11 +10,18 @@ import shutil
 import zipfile
 import tempfile
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, NamedTuple
 from pathlib import Path
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+
+class PackageResult(NamedTuple):
+    """Result of packaging operation."""
+    path: str
+    media_type: str
+    filename: str
 
 
 def create_result_package(
@@ -23,25 +30,33 @@ def create_result_package(
     package_name: Optional[str] = None,
     include_metadata: bool = True,
     include_raw_output: bool = False,
-) -> str:
+    result_format: str = "zip",
+) -> PackageResult:
     """
-    Create a ZIP package containing all OCR results.
+    Create a result package containing OCR results.
 
     Args:
         results: List of result dictionaries from process_output().
         output_dir: Directory containing result files.
-        package_name: Optional name for the ZIP file.
-        include_metadata: Whether to include metadata JSON.
+        package_name: Optional name for the output file.
+        include_metadata: Whether to include metadata JSON (zip only).
         include_raw_output: Whether to include raw model output in doc.json.
+        result_format: Output format - 'zip', 'markdown', or 'json'.
 
     Returns:
-        Path to the created ZIP file.
+        PackageResult with path, media_type, and filename.
     """
     if package_name is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         package_name = f"ocr_results_{timestamp}"
 
-    zip_path = os.path.join(output_dir, f"{package_name}.zip")
+    # Collect all markdown content
+    all_markdown = []
+    for result in results:
+        markdown_content = result.get("markdown", "")
+        all_markdown.append(markdown_content)
+
+    combined_md = "\n\n---\n\n".join(all_markdown)
 
     # Build doc.json structure
     document_data = {
@@ -50,72 +65,82 @@ def create_result_package(
         "pages": [],
     }
 
+    for idx, result in enumerate(results):
+        raw_output = result.get("raw_output")
+        annotated_path = result.get("annotated_image_path")
+        annotated_arcname = f"annotated/page_{idx}.jpg" if annotated_path and os.path.exists(annotated_path) else None
+
+        extracted_arcnames = []
+        for img_path in result.get("extracted_images", []):
+            if os.path.exists(img_path):
+                img_name = os.path.basename(img_path)
+                extracted_arcnames.append(f"images/{img_name}")
+
+        page_data = {
+            "page_index": idx,
+            "annotated_image": annotated_arcname,
+            "extracted_images": extracted_arcnames,
+            "elements": result.get("elements", []),
+            "image_info": result.get("image_info", {}),
+        }
+        if include_raw_output and raw_output:
+            page_data["raw_output"] = raw_output
+        document_data["pages"].append(page_data)
+
+    # Save combined markdown to output_dir
+    combined_md_path = os.path.join(output_dir, "combined.md")
+    with open(combined_md_path, 'w', encoding='utf-8') as f:
+        f.write(combined_md)
+
+    # Save doc.json to output_dir
+    document_json_content = json.dumps(document_data, indent=2, ensure_ascii=False)
+    document_json_path = os.path.join(output_dir, "doc.json")
+    with open(document_json_path, 'w', encoding='utf-8') as f:
+        f.write(document_json_content)
+
+    # Return based on format
+    if result_format == "markdown":
+        logger.info(f"Created markdown result: {combined_md_path}")
+        return PackageResult(
+            path=combined_md_path,
+            media_type="text/markdown; charset=utf-8",
+            filename=f"{package_name}.md"
+        )
+
+    if result_format == "json":
+        logger.info(f"Created JSON result: {document_json_path}")
+        return PackageResult(
+            path=document_json_path,
+            media_type="application/json",
+            filename=f"{package_name}.json"
+        )
+
+    # Default: create ZIP package
+    zip_path = os.path.join(output_dir, f"{package_name}.zip")
+
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        # Collect all markdown content
-        all_markdown = []
-
         for idx, result in enumerate(results):
-            # Add markdown file for each page
             markdown_content = result.get("markdown", "")
-            all_markdown.append(markdown_content)
-
             md_filename = f"page_{idx}.md"
             zipf.writestr(md_filename, markdown_content)
 
-            # Add raw output if present
             raw_output = result.get("raw_output")
             if raw_output:
                 raw_filename = f"page_{idx}_raw.txt"
                 zipf.writestr(raw_filename, raw_output)
 
-            # Add annotated image
             annotated_path = result.get("annotated_image_path")
-            annotated_arcname = None
             if annotated_path and os.path.exists(annotated_path):
-                annotated_arcname = f"annotated/page_{idx}.jpg"
-                zipf.write(annotated_path, annotated_arcname)
+                zipf.write(annotated_path, f"annotated/page_{idx}.jpg")
 
-            # Add extracted images
-            extracted_arcnames = []
             for img_path in result.get("extracted_images", []):
                 if os.path.exists(img_path):
                     img_name = os.path.basename(img_path)
-                    arcname = f"images/{img_name}"
-                    zipf.write(img_path, arcname)
-                    extracted_arcnames.append(arcname)
+                    zipf.write(img_path, f"images/{img_name}")
 
-            # Build page data for doc.json
-            page_data = {
-                "page_index": idx,
-                "annotated_image": annotated_arcname,
-                "extracted_images": extracted_arcnames,
-                "elements": result.get("elements", []),
-                "image_info": result.get("image_info", {}),
-            }
-            # Only include raw_output if requested
-            if include_raw_output and raw_output:
-                page_data["raw_output"] = raw_output
-            document_data["pages"].append(page_data)
-
-        # Add combined markdown
-        combined_md = "\n\n---\n\n".join(all_markdown)
         zipf.writestr("combined.md", combined_md)
-
-        # Also save combined markdown to output_dir for preview
-        combined_md_path = os.path.join(output_dir, "combined.md")
-        with open(combined_md_path, 'w', encoding='utf-8') as f:
-            f.write(combined_md)
-
-        # Add doc.json
-        document_json_content = json.dumps(document_data, indent=2, ensure_ascii=False)
         zipf.writestr("doc.json", document_json_content)
 
-        # Also save doc.json to output_dir for preview/access
-        document_json_path = os.path.join(output_dir, "doc.json")
-        with open(document_json_path, 'w', encoding='utf-8') as f:
-            f.write(document_json_content)
-
-        # Add metadata (legacy format for backwards compatibility)
         if include_metadata:
             metadata = {
                 "created_at": datetime.now().isoformat(),
@@ -129,17 +154,18 @@ def create_result_package(
                     "images": []
                 }
             }
-
-            # Collect all image names
             for result in results:
                 for img_path in result.get("extracted_images", []):
                     img_name = os.path.basename(img_path)
                     metadata["files"]["images"].append(f"images/{img_name}")
-
             zipf.writestr("metadata.json", json.dumps(metadata, indent=2))
 
     logger.info(f"Created result package: {zip_path}")
-    return zip_path
+    return PackageResult(
+        path=zip_path,
+        media_type="application/zip",
+        filename=f"{package_name}.zip"
+    )
 
 
 def create_pdf_result_package(
@@ -149,9 +175,10 @@ def create_pdf_result_package(
     original_filename: str = "document",
     page_separator: str = "\n<--- Page Split --->\n",
     include_raw_output: bool = False,
-) -> str:
+    result_format: str = "zip",
+) -> PackageResult:
     """
-    Create a ZIP package for PDF OCR results.
+    Create a result package for PDF OCR results.
 
     Args:
         results: List of result dictionaries.
@@ -160,13 +187,26 @@ def create_pdf_result_package(
         original_filename: Original PDF filename (without extension).
         page_separator: Separator between pages.
         include_raw_output: Whether to include raw model output in doc.json.
+        result_format: Output format - 'zip', 'markdown', or 'json'.
 
     Returns:
-        Path to the created ZIP file.
+        PackageResult with path, media_type, and filename.
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     package_name = f"{original_filename}_{timestamp}"
-    zip_path = os.path.join(output_dir, f"{package_name}.zip")
+
+    # Combine all markdown with page separators
+    all_markdown = []
+    all_raw = []
+
+    for result in results:
+        markdown = result.get("markdown", "")
+        all_markdown.append(markdown)
+        raw = result.get("raw_output", "")
+        if raw:
+            all_raw.append(raw)
+
+    combined_md = page_separator.join(all_markdown)
 
     # Build doc.json structure
     document_data = {
@@ -177,65 +217,74 @@ def create_pdf_result_package(
         "pages": [],
     }
 
+    for idx, result in enumerate(results):
+        raw = result.get("raw_output", "")
+        extracted_arcnames = []
+        for img_path in result.get("extracted_images", []):
+            if os.path.exists(img_path):
+                img_name = os.path.basename(img_path)
+                extracted_arcnames.append(f"images/{img_name}")
+
+        annotated_image = result.get("annotated_image_path")
+        annotated_arcname = f"annotated/page_{idx}.jpg" if annotated_image and os.path.exists(annotated_image) else None
+
+        page_data = {
+            "page_index": idx,
+            "annotated_image": annotated_arcname,
+            "extracted_images": extracted_arcnames,
+            "elements": result.get("elements", []),
+            "image_info": result.get("image_info", {}),
+        }
+        if include_raw_output and raw:
+            page_data["raw_output"] = raw
+        document_data["pages"].append(page_data)
+
+    # Save combined markdown to output_dir
+    combined_md_path = os.path.join(output_dir, f"{original_filename}.md")
+    with open(combined_md_path, 'w', encoding='utf-8') as f:
+        f.write(combined_md)
+
+    # Save doc.json to output_dir
+    document_json_content = json.dumps(document_data, indent=2, ensure_ascii=False)
+    document_json_path = os.path.join(output_dir, "doc.json")
+    with open(document_json_path, 'w', encoding='utf-8') as f:
+        f.write(document_json_content)
+
+    # Return based on format
+    if result_format == "markdown":
+        logger.info(f"Created markdown result: {combined_md_path}")
+        return PackageResult(
+            path=combined_md_path,
+            media_type="text/markdown; charset=utf-8",
+            filename=f"{original_filename}.md"
+        )
+
+    if result_format == "json":
+        logger.info(f"Created JSON result: {document_json_path}")
+        return PackageResult(
+            path=document_json_path,
+            media_type="application/json",
+            filename=f"{original_filename}.json"
+        )
+
+    # Default: create ZIP package
+    zip_path = os.path.join(output_dir, f"{package_name}.zip")
+
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-        # Combine all markdown with page separators
-        all_markdown = []
-        all_raw = []
-
         for idx, result in enumerate(results):
-            markdown = result.get("markdown", "")
-            all_markdown.append(markdown)
-
-            raw = result.get("raw_output", "")
-            if raw:
-                all_raw.append(raw)
-
-            # Collect extracted images for this page
-            extracted_arcnames = []
-            for img_path in result.get("extracted_images", []):
-                if os.path.exists(img_path):
-                    img_name = os.path.basename(img_path)
-                    extracted_arcnames.append(f"images/{img_name}")
-
-            # Get annotated image path for this page
             annotated_image = result.get("annotated_image_path")
-            annotated_arcname = None
             if annotated_image and os.path.exists(annotated_image):
-                annotated_arcname = f"annotated/page_{idx}.jpg"
-                zipf.write(annotated_image, annotated_arcname)
+                zipf.write(annotated_image, f"annotated/page_{idx}.jpg")
 
-            # Build page data for doc.json
-            page_data = {
-                "page_index": idx,
-                "annotated_image": annotated_arcname,
-                "extracted_images": extracted_arcnames,
-                "elements": result.get("elements", []),
-                "image_info": result.get("image_info", {}),
-            }
-            # Only include raw_output if requested
-            if include_raw_output and raw:
-                page_data["raw_output"] = raw
-            document_data["pages"].append(page_data)
-
-        # Combined markdown
-        combined_md = page_separator.join(all_markdown)
         zipf.writestr(f"{original_filename}.md", combined_md)
 
-        # Also save combined markdown to output_dir for preview
-        combined_md_path = os.path.join(output_dir, f"{original_filename}.md")
-        with open(combined_md_path, 'w', encoding='utf-8') as f:
-            f.write(combined_md)
-
-        # Combined raw output
         if all_raw:
             combined_raw = page_separator.join(all_raw)
             zipf.writestr(f"{original_filename}_raw.md", combined_raw)
 
-        # Add annotated PDF
         if annotated_pdf_path and os.path.exists(annotated_pdf_path):
             zipf.write(annotated_pdf_path, f"{original_filename}_annotated.pdf")
 
-        # Add extracted images
         images_dir = os.path.join(output_dir, "images")
         if os.path.exists(images_dir):
             for img_file in os.listdir(images_dir):
@@ -243,16 +292,8 @@ def create_pdf_result_package(
                 if os.path.isfile(img_path):
                     zipf.write(img_path, f"images/{img_file}")
 
-        # Add doc.json
-        document_json_content = json.dumps(document_data, indent=2, ensure_ascii=False)
         zipf.writestr("doc.json", document_json_content)
 
-        # Also save doc.json to output_dir for preview/access
-        document_json_path = os.path.join(output_dir, "doc.json")
-        with open(document_json_path, 'w', encoding='utf-8') as f:
-            f.write(document_json_content)
-
-        # Add metadata (legacy format for backwards compatibility)
         metadata = {
             "created_at": datetime.now().isoformat(),
             "original_filename": original_filename,
@@ -267,7 +308,11 @@ def create_pdf_result_package(
         zipf.writestr("metadata.json", json.dumps(metadata, indent=2))
 
     logger.info(f"Created PDF result package: {zip_path}")
-    return zip_path
+    return PackageResult(
+        path=zip_path,
+        media_type="application/zip",
+        filename=f"{original_filename}_ocr.zip"
+    )
 
 
 def create_temp_directory(prefix: str = "deepseek_ocr2_") -> str:

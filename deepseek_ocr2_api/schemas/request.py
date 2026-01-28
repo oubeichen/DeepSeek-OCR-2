@@ -4,8 +4,16 @@ Request schemas for DeepSeek-OCR-2 API Server.
 Defines Pydantic models for API request validation with OpenAPI documentation.
 """
 
-from typing import Optional, List
+from enum import Enum
+from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
+
+
+class ResultFormat(str, Enum):
+    """Output format for OCR results."""
+    ZIP = "zip"
+    MARKDOWN = "markdown"
+    JSON = "json"
 
 
 class OCRRequest(BaseModel):
@@ -65,6 +73,10 @@ class OCRRequest(BaseModel):
         default=True,
         description="Extract image regions from document"
     )
+    result_format: ResultFormat = Field(
+        default=ResultFormat.ZIP,
+        description="Output format: 'zip' (full package), 'markdown' (text only), 'json' (doc.json only)"
+    )
 
     class Config:
         json_schema_extra = {
@@ -74,7 +86,8 @@ class OCRRequest(BaseModel):
                 "max_tokens": 8192,
                 "crop_mode": True,
                 "return_annotated_image": True,
-                "extract_images": True
+                "extract_images": True,
+                "result_format": "zip"
             }
         }
 

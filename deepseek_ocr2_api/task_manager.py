@@ -436,13 +436,15 @@ class TaskManager:
                         )
 
                         # Package results (run in thread pool to avoid blocking)
-                        zip_path = await asyncio.to_thread(
+                        result_format = params.get("result_format", "zip")
+                        package_result = await asyncio.to_thread(
                             create_result_package,
                             results=[result],
                             output_dir=task.output_dir,
                             package_name=task.task_id,
+                            result_format=result_format,
                         )
-                        task.result_zip_path = zip_path
+                        task.result_zip_path = package_result.path
 
                     else:
                         # Process PDF with page-level fair scheduling
@@ -568,15 +570,17 @@ class TaskManager:
 
                         # Package results (run in thread pool to avoid blocking)
                         original_name = os.path.splitext(task.filename)[0]
-                        zip_path = await asyncio.to_thread(
+                        result_format = params.get("result_format", "zip")
+                        package_result = await asyncio.to_thread(
                             create_pdf_result_package,
                             results=results,
                             output_dir=task.output_dir,
                             annotated_pdf_path=annotated_pdf_path,
                             original_filename=original_name,
                             page_separator=page_separator,
+                            result_format=result_format,
                         )
-                        task.result_zip_path = zip_path
+                        task.result_zip_path = package_result.path
 
                     # Mark as completed
                     task.status = TaskStatus.COMPLETED

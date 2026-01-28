@@ -137,6 +137,8 @@ async def upload_file(
     dpi: Optional[int] = Form(default=None, description="PDF conversion DPI", examples=[None]),
     page_separator: Optional[str] = Form(default=None, description="Page separator in output (leave empty to use default)", examples=[""]),
     skip_repeat_pages: Optional[bool] = Form(default=None, description="Skip repeated/incomplete pages", examples=[None]),
+    # Output format
+    result_format: str = Form(default="zip", description="Output format: zip, markdown, or json"),
 ):
     """
     Upload a file and create an OCR task.
@@ -210,6 +212,12 @@ async def upload_file(
     if skip_repeat_pages is not None:
         ocr_params["skip_repeat_pages"] = skip_repeat_pages
 
+    # Output format
+    if result_format in ("zip", "markdown", "json"):
+        ocr_params["result_format"] = result_format
+    else:
+        ocr_params["result_format"] = "zip"
+
     # Create task
     task = manager.create_task(
         filename=file.filename,
@@ -274,7 +282,7 @@ async def delete_task(task_id: str):
 
 @router.get("/tasks/{task_id}/download")
 async def download_result(task_id: str):
-    """Download the result ZIP file for a completed task."""
+    """Download the result file for a completed task."""
     manager = get_task_manager()
     task = manager.get_task(task_id)
 
@@ -287,10 +295,26 @@ async def download_result(task_id: str):
     if not task.result_zip_path or not os.path.exists(task.result_zip_path):
         raise HTTPException(status_code=404, detail="Result file not found")
 
+    # Determine media type based on file extension
+    result_path = task.result_zip_path
+    ext = os.path.splitext(result_path)[1].lower()
+    if ext == ".zip":
+        media_type = "application/zip"
+        filename = f"{task.task_id}.zip"
+    elif ext == ".md":
+        media_type = "text/markdown; charset=utf-8"
+        filename = f"{task.task_id}.md"
+    elif ext == ".json":
+        media_type = "application/json"
+        filename = f"{task.task_id}.json"
+    else:
+        media_type = "application/octet-stream"
+        filename = os.path.basename(result_path)
+
     return FileResponse(
-        path=task.result_zip_path,
-        media_type="application/zip",
-        filename=f"{task.task_id}.zip",
+        path=result_path,
+        media_type=media_type,
+        filename=filename,
     )
 
 

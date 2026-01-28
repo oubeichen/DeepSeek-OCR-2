@@ -35,9 +35,10 @@ from ..utils.packaging import (
     create_pdf_result_package,
     create_temp_directory,
     cleanup_temp_files,
+    PackageResult,
 )
 from ..utils import unescape_string
-from ..schemas.request import ImageOCRRequest, PDFOCRRequest, BatchOCRRequest
+from ..schemas.request import ImageOCRRequest, PDFOCRRequest, BatchOCRRequest, ResultFormat
 from ..schemas.response import OCRResponse, OCRResult, ErrorResponse
 
 logger = logging.getLogger(__name__)
@@ -63,25 +64,27 @@ def validate_pdf_file(filename: str) -> bool:
 
 @router.post(
     "/image",
-    response_class=FileResponse,
     summary="Single Image OCR",
     description="""
 Process a single image and extract text content as markdown.
 
 **Supported formats:** PNG, JPG, JPEG, WebP, BMP, TIFF, GIF
 
-**Returns:** ZIP file containing:
-- Markdown file with extracted content
-- Annotated image with bounding boxes (optional)
-- Extracted image regions (optional)
-- Metadata JSON
+**Returns:** Based on result_format parameter:
+- zip: ZIP file with markdown, annotated image, extracted images, and metadata
+- markdown: Plain text markdown content
+- json: doc.json with structured data
 
 **Parameters can be passed as form fields along with the file upload.**
     """,
     responses={
         200: {
-            "description": "ZIP file with OCR results",
-            "content": {"application/zip": {}}
+            "description": "OCR results in requested format",
+            "content": {
+                "application/zip": {},
+                "text/markdown": {},
+                "application/json": {}
+            }
         },
         400: {"model": ErrorResponse, "description": "Invalid request"},
         500: {"model": ErrorResponse, "description": "Processing error"},
@@ -99,6 +102,7 @@ async def ocr_image(
     return_raw_output: bool = Form(default=False, description="Include raw output"),
     return_annotated_image: bool = Form(default=True, description="Include annotated image"),
     extract_images: bool = Form(default=True, description="Extract image regions"),
+    result_format: ResultFormat = Form(default=ResultFormat.ZIP, description="Output format: zip, markdown, or json"),
 ):
     """
     Process a single image for OCR.
@@ -174,11 +178,12 @@ async def ocr_image(
             result["raw_output"] = None
 
         # Package results
-        zip_path = create_result_package(
+        package_result = create_result_package(
             results=[result],
             output_dir=temp_dir,
             package_name=request_id,
             include_raw_output=return_raw_output,
+            result_format=result_format.value,
         )
 
         processing_time = time.time() - start_time
@@ -187,11 +192,11 @@ async def ocr_image(
         # Schedule cleanup
         background_tasks.add_task(cleanup_temp_files, [temp_dir], True)
 
-        # Return ZIP file
+        # Return result in requested format
         return FileResponse(
-            path=zip_path,
-            media_type="application/zip",
-            filename=f"{request_id}.zip",
+            path=package_result.path,
+            media_type=package_result.media_type,
+            filename=package_result.filename,
             background=background_tasks,
         )
 
@@ -208,23 +213,25 @@ async def ocr_image(
 
 @router.post(
     "/pdf",
-    response_class=FileResponse,
     summary="PDF OCR",
     description="""
 Process a PDF document and extract text content as markdown.
 
-**Returns:** ZIP file containing:
-- Combined markdown file with all pages
-- Annotated PDF with bounding boxes (optional)
-- Extracted images from all pages
-- Metadata JSON
+**Returns:** Based on result_format parameter:
+- zip: ZIP file with combined markdown, annotated PDF, extracted images, and metadata
+- markdown: Plain text markdown content with all pages
+- json: doc.json with structured data
 
 **Parameters can be passed as form fields along with the file upload.**
     """,
     responses={
         200: {
-            "description": "ZIP file with OCR results",
-            "content": {"application/zip": {}}
+            "description": "OCR results in requested format",
+            "content": {
+                "application/zip": {},
+                "text/markdown": {},
+                "application/json": {}
+            }
         },
         400: {"model": ErrorResponse, "description": "Invalid request"},
         500: {"model": ErrorResponse, "description": "Processing error"},
@@ -245,6 +252,7 @@ async def ocr_pdf(
     generate_annotated_pdf: bool = Form(default=True, description="Generate annotated PDF"),
     return_raw_output: bool = Form(default=False, description="Include raw output"),
     extract_images: bool = Form(default=True, description="Extract image regions"),
+    result_format: ResultFormat = Form(default=ResultFormat.ZIP, description="Output format: zip, markdown, or json"),
 ):
     """
     Process a PDF document for OCR.
@@ -348,13 +356,14 @@ async def ocr_pdf(
         original_name = os.path.splitext(file.filename)[0]
         _page_sep = unescape_string(page_separator) if page_separator else settings.page_separator
 
-        zip_path = create_pdf_result_package(
+        package_result = create_pdf_result_package(
             results=results,
             output_dir=temp_dir,
             annotated_pdf_path=annotated_pdf_path,
             original_filename=original_name,
             page_separator=_page_sep,
             include_raw_output=return_raw_output,
+            result_format=result_format.value,
         )
 
         processing_time = time.time() - start_time
@@ -363,11 +372,11 @@ async def ocr_pdf(
         # Schedule cleanup
         background_tasks.add_task(cleanup_temp_files, [temp_dir], True)
 
-        # Return ZIP file
+        # Return result in requested format
         return FileResponse(
-            path=zip_path,
-            media_type="application/zip",
-            filename=f"{original_name}_ocr.zip",
+            path=package_result.path,
+            media_type=package_result.media_type,
+            filename=package_result.filename,
             background=background_tasks,
         )
 
@@ -384,19 +393,25 @@ async def ocr_pdf(
 
 @router.post(
     "/batch",
-    response_class=FileResponse,
     summary="Batch Image OCR",
     description="""
 Process multiple images in a single request.
 
 **Supported formats:** PNG, JPG, JPEG, WebP, BMP, TIFF, GIF
 
-**Returns:** ZIP file containing results for all images.
+**Returns:** Based on result_format parameter:
+- zip: ZIP file with results for all images
+- markdown: Plain text markdown content with all images
+- json: doc.json with structured data
     """,
     responses={
         200: {
-            "description": "ZIP file with OCR results",
-            "content": {"application/zip": {}}
+            "description": "OCR results in requested format",
+            "content": {
+                "application/zip": {},
+                "text/markdown": {},
+                "application/json": {}
+            }
         },
         400: {"model": ErrorResponse, "description": "Invalid request"},
         500: {"model": ErrorResponse, "description": "Processing error"},
@@ -415,6 +430,7 @@ async def ocr_batch(
     return_raw_output: bool = Form(default=False, description="Include raw output"),
     return_annotated_image: bool = Form(default=True, description="Include annotated images"),
     extract_images: bool = Form(default=True, description="Extract image regions"),
+    result_format: ResultFormat = Form(default=ResultFormat.ZIP, description="Output format: zip, markdown, or json"),
 ):
     """
     Process multiple images for OCR in batch.
@@ -505,11 +521,12 @@ async def ocr_batch(
             results.append(result)
 
         # Package results
-        zip_path = create_result_package(
+        package_result = create_result_package(
             results=results,
             output_dir=temp_dir,
             package_name=request_id,
             include_raw_output=return_raw_output,
+            result_format=result_format.value,
         )
 
         processing_time = time.time() - start_time
@@ -518,11 +535,11 @@ async def ocr_batch(
         # Schedule cleanup
         background_tasks.add_task(cleanup_temp_files, [temp_dir], True)
 
-        # Return ZIP file
+        # Return result in requested format
         return FileResponse(
-            path=zip_path,
-            media_type="application/zip",
-            filename=f"{request_id}.zip",
+            path=package_result.path,
+            media_type=package_result.media_type,
+            filename=package_result.filename,
             background=background_tasks,
         )
 
