@@ -11,8 +11,9 @@ Provides endpoints for:
 
 import os
 import mimetypes
+import time
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict, Tuple
 from functools import lru_cache
 
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException, BackgroundTasks
@@ -26,9 +27,38 @@ from ..utils import unescape_string
 
 logger = logging.getLogger(__name__)
 
-# Cache for task markdown content (task_id -> markdown_content)
-# Cleared when task is deleted
-_markdown_cache: Dict[str, str] = {}
+# Cache for task markdown content: task_id -> (content, timestamp)
+# TTL: 60 seconds, Max entries: 50
+_CACHE_TTL = 60
+_CACHE_MAX_SIZE = 50
+_markdown_cache: Dict[str, Tuple[str, float]] = {}
+
+
+def _cache_get(task_id: str) -> Optional[str]:
+    """Get cached content if exists and not expired."""
+    if task_id in _markdown_cache:
+        content, ts = _markdown_cache[task_id]
+        if time.time() - ts < _CACHE_TTL:
+            return content
+        # Expired, remove it
+        del _markdown_cache[task_id]
+    return None
+
+
+def _cache_set(task_id: str, content: str):
+    """Set cache with TTL, evict oldest if full."""
+    # Evict expired entries first
+    now = time.time()
+    expired = [k for k, (_, ts) in _markdown_cache.items() if now - ts >= _CACHE_TTL]
+    for k in expired:
+        del _markdown_cache[k]
+
+    # If still full, evict oldest
+    if len(_markdown_cache) >= _CACHE_MAX_SIZE:
+        oldest_key = min(_markdown_cache, key=lambda k: _markdown_cache[k][1])
+        del _markdown_cache[oldest_key]
+
+    _markdown_cache[task_id] = (content, now)
 
 router = APIRouter(prefix="/api", tags=["Tasks"])
 
@@ -283,7 +313,8 @@ async def delete_task(task_id: str):
         raise HTTPException(status_code=404, detail="Task not found")
 
     # Clear cache
-    _markdown_cache.pop(task_id, None)
+    if task_id in _markdown_cache:
+        del _markdown_cache[task_id]
 
     return {"success": True, "message": f"Task {task_id} deleted"}
 
@@ -462,9 +493,8 @@ async def preview_result(task_id: str):
         raise HTTPException(status_code=400, detail="Task not completed")
 
     # Check cache first
-    if task_id in _markdown_cache:
-        md_content = _markdown_cache[task_id]
-    else:
+    md_content = _cache_get(task_id)
+    if not md_content:
         # Get markdown content
         md_content = None
         
@@ -492,9 +522,9 @@ async def preview_result(task_id: str):
         
         if not md_content:
             raise HTTPException(status_code=404, detail="No markdown result found")
-        
+
         # Store in cache
-        _markdown_cache[task_id] = md_content
+        _cache_set(task_id, md_content)
 
     # Render as HTML with basic styling
     html_content = f"""
