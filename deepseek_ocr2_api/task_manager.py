@@ -444,7 +444,20 @@ class TaskManager:
                             package_name=task.task_id,
                             result_format=result_format,
                         )
-                        task.result_zip_path = package_result.path
+                        # For async tasks, save content to file if path is None
+                        if package_result.path:
+                            task.result_zip_path = package_result.path
+                        else:
+                            # Save content to file for later download
+                            ext = ".md" if result_format == "markdown" else ".json"
+                            result_file = os.path.join(task.output_dir, f"{task.task_id}{ext}")
+                            content = package_result.content
+                            if result_format == "json":
+                                import json
+                                content = json.dumps(content, indent=2, ensure_ascii=False)
+                            with open(result_file, 'w', encoding='utf-8') as f:
+                                f.write(content)
+                            task.result_zip_path = result_file
 
                     else:
                         # Process PDF with page-level fair scheduling
@@ -580,7 +593,20 @@ class TaskManager:
                             page_separator=page_separator,
                             result_format=result_format,
                         )
-                        task.result_zip_path = package_result.path
+                        # For async tasks, save content to file if path is None
+                        if package_result.path:
+                            task.result_zip_path = package_result.path
+                        else:
+                            # Save content to file for later download
+                            ext = ".md" if result_format == "markdown" else ".json"
+                            result_file = os.path.join(task.output_dir, f"{original_name}{ext}")
+                            content = package_result.content
+                            if result_format == "json":
+                                import json
+                                content = json.dumps(content, indent=2, ensure_ascii=False)
+                            with open(result_file, 'w', encoding='utf-8') as f:
+                                f.write(content)
+                            task.result_zip_path = result_file
 
                     # Mark as completed
                     task.status = TaskStatus.COMPLETED

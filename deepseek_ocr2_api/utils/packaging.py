@@ -19,9 +19,10 @@ logger = logging.getLogger(__name__)
 
 class PackageResult(NamedTuple):
     """Result of packaging operation."""
-    path: str
+    path: Optional[str]  # File path for zip, None for text formats
     media_type: str
     filename: str
+    content: Optional[str] = None  # Text content for markdown/json, None for zip
 
 
 def create_result_package(
@@ -44,7 +45,7 @@ def create_result_package(
         result_format: Output format - 'zip', 'markdown', or 'json'.
 
     Returns:
-        PackageResult with path, media_type, and filename.
+        PackageResult with path/content, media_type, and filename.
     """
     if package_name is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -57,6 +58,16 @@ def create_result_package(
         all_markdown.append(markdown_content)
 
     combined_md = "\n\n---\n\n".join(all_markdown)
+
+    # Return markdown directly without writing to file
+    if result_format == "markdown":
+        logger.info(f"Returning markdown content directly ({len(combined_md)} chars)")
+        return PackageResult(
+            path=None,
+            media_type="text/markdown; charset=utf-8",
+            filename=f"{package_name}.md",
+            content=combined_md,
+        )
 
     # Build doc.json structure
     document_data = {
@@ -87,32 +98,16 @@ def create_result_package(
             page_data["raw_output"] = raw_output
         document_data["pages"].append(page_data)
 
-    # Save combined markdown to output_dir
-    combined_md_path = os.path.join(output_dir, "combined.md")
-    with open(combined_md_path, 'w', encoding='utf-8') as f:
-        f.write(combined_md)
-
-    # Save doc.json to output_dir
     document_json_content = json.dumps(document_data, indent=2, ensure_ascii=False)
-    document_json_path = os.path.join(output_dir, "doc.json")
-    with open(document_json_path, 'w', encoding='utf-8') as f:
-        f.write(document_json_content)
 
-    # Return based on format
-    if result_format == "markdown":
-        logger.info(f"Created markdown result: {combined_md_path}")
-        return PackageResult(
-            path=combined_md_path,
-            media_type="text/markdown; charset=utf-8",
-            filename=f"{package_name}.md"
-        )
-
+    # Return json directly without writing to file
     if result_format == "json":
-        logger.info(f"Created JSON result: {document_json_path}")
+        logger.info(f"Returning JSON content directly ({len(document_json_content)} chars)")
         return PackageResult(
-            path=document_json_path,
+            path=None,
             media_type="application/json",
-            filename=f"{package_name}.json"
+            filename=f"{package_name}.json",
+            content=document_json_content,
         )
 
     # Default: create ZIP package
@@ -239,35 +234,27 @@ def create_pdf_result_package(
             page_data["raw_output"] = raw
         document_data["pages"].append(page_data)
 
-    # Save combined markdown to output_dir
-    combined_md_path = os.path.join(output_dir, f"{original_filename}.md")
-    with open(combined_md_path, 'w', encoding='utf-8') as f:
-        f.write(combined_md)
-
-    # Save doc.json to output_dir
-    document_json_content = json.dumps(document_data, indent=2, ensure_ascii=False)
-    document_json_path = os.path.join(output_dir, "doc.json")
-    with open(document_json_path, 'w', encoding='utf-8') as f:
-        f.write(document_json_content)
-
-    # Return based on format
+    # Return based on format - avoid file I/O for markdown and json
     if result_format == "markdown":
-        logger.info(f"Created markdown result: {combined_md_path}")
+        logger.info(f"Returning markdown content directly for {original_filename}")
         return PackageResult(
-            path=combined_md_path,
+            path=None,
             media_type="text/markdown; charset=utf-8",
-            filename=f"{original_filename}.md"
+            filename=f"{original_filename}.md",
+            content=combined_md
         )
 
     if result_format == "json":
-        logger.info(f"Created JSON result: {document_json_path}")
+        logger.info(f"Returning JSON content directly for {original_filename}")
         return PackageResult(
-            path=document_json_path,
+            path=None,
             media_type="application/json",
-            filename=f"{original_filename}.json"
+            filename=f"{original_filename}.json",
+            content=document_data  # Return dict directly for JSONResponse
         )
 
-    # Default: create ZIP package
+    # Default: create ZIP package (requires file I/O)
+    document_json_content = json.dumps(document_data, indent=2, ensure_ascii=False)
     zip_path = os.path.join(output_dir, f"{package_name}.zip")
 
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:

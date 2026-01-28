@@ -194,13 +194,9 @@ async def ocr_image(
 
         # Return result in requested format
         if result_format == ResultFormat.MARKDOWN:
-            with open(package_result.path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            return Response(content=content, media_type="text/markdown; charset=utf-8")
+            return Response(content=package_result.content, media_type="text/markdown; charset=utf-8")
         elif result_format == ResultFormat.JSON:
-            with open(package_result.path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            return Response(content=content, media_type="application/json")
+            return JSONResponse(content=package_result.content)
         else:
             return FileResponse(
                 path=package_result.path,
@@ -383,13 +379,9 @@ async def ocr_pdf(
 
         # Return result in requested format
         if result_format == ResultFormat.MARKDOWN:
-            with open(package_result.path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            return Response(content=content, media_type="text/markdown; charset=utf-8")
+            return Response(content=package_result.content, media_type="text/markdown; charset=utf-8")
         elif result_format == ResultFormat.JSON:
-            with open(package_result.path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            return Response(content=content, media_type="application/json")
+            return JSONResponse(content=package_result.content)
         else:
             return FileResponse(
                 path=package_result.path,
@@ -555,13 +547,9 @@ async def ocr_batch(
 
         # Return result in requested format
         if result_format == ResultFormat.MARKDOWN:
-            with open(package_result.path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            return Response(content=content, media_type="text/markdown; charset=utf-8")
+            return Response(content=package_result.content, media_type="text/markdown; charset=utf-8")
         elif result_format == ResultFormat.JSON:
-            with open(package_result.path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            return Response(content=content, media_type="application/json")
+            return JSONResponse(content=package_result.content)
         else:
             return FileResponse(
                 path=package_result.path,
