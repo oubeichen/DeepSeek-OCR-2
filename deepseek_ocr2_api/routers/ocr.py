@@ -289,8 +289,10 @@ async def ocr_pdf(
 
         # Convert PDF to images
         _dpi = dpi or settings.pdf_dpi
-        logger.info(f"[{request_id}] Converting PDF to images (DPI={_dpi})...")
-        images = await pdf_to_images_from_upload(file, dpi=_dpi)
+        logger.info(f"[{request_id}] Converting PDF to images (DPI={_dpi}, workers={settings.pdf_conversion_workers})...")
+        images = await pdf_to_images_from_upload(
+            file, dpi=_dpi, num_workers=settings.pdf_conversion_workers
+        )
         logger.info(f"[{request_id}] PDF has {len(images)} pages")
 
         # Prepare prompt

@@ -461,9 +461,10 @@ class TaskManager:
 
                     else:
                         # Process PDF with page-level fair scheduling
-                        task.add_log("Converting PDF to images...")
+                        task.add_log(f"Converting PDF to images (workers={settings.pdf_conversion_workers})...")
                         images = await asyncio.to_thread(
-                            pdf_to_images, task.input_file_path, dpi=dpi
+                            pdf_to_images, task.input_file_path, dpi=dpi,
+                            num_workers=settings.pdf_conversion_workers
                         )
                         task.total_pages = len(images)
                         task.add_log(f"PDF has {len(images)} pages")

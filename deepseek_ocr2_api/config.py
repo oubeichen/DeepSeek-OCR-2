@@ -93,6 +93,14 @@ class Settings(BaseSettings):
         default=True,
         description="Whether to disable multimodal preprocessor cache"
     )
+    engine_iteration_timeout: int = Field(
+        default=120,
+        ge=30,
+        le=3600,
+        description="Timeout in seconds for each vLLM engine iteration. "
+                    "Increase for large files or slow hardware. "
+                    "Maps to VLLM_ENGINE_ITERATION_TIMEOUT_S environment variable."
+    )
 
     # ==========================
     # Image Processing Settings
@@ -174,6 +182,12 @@ class Settings(BaseSettings):
     skip_repeat_pages: bool = Field(
         default=True,
         description="Whether to skip repeated pages in PDF"
+    )
+    pdf_conversion_workers: int = Field(
+        default=16,
+        ge=1,
+        le=32,
+        description="Number of workers for parallel PDF to image conversion"
     )
 
     # ==============
@@ -286,6 +300,7 @@ class Settings(BaseSettings):
         return {
             "CUDA_VISIBLE_DEVICES": self.cuda_visible_devices,
             "VLLM_USE_V1": "0",
+            "VLLM_ENGINE_ITERATION_TIMEOUT_S": str(self.engine_iteration_timeout),
         }
 
     def apply_env_vars(self):
