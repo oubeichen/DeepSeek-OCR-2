@@ -1,0 +1,27 @@
+services:
+  deepseek-ocr2-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VLLM_WHL_URL: ${VLLM_WHL_URL:-https://github.com/vllm-project/vllm/releases/download/v0.8.5/vllm-0.8.5+cu118-cp38-abi3-manylinux1_x86_64.whl}
+    image: deepseek-ocr2-api:latest
+    env_file:
+      - ./.env
+    environment:
+      VLLM_USE_V1: "0"
+      CUDA_VISIBLE_DEVICES: ${DEEPSEEK_OCR2_CUDA_VISIBLE_DEVICES:-0}
+      HF_HOME: /cache/huggingface
+      TRANSFORMERS_CACHE: /cache/huggingface
+      DEEPSEEK_OCR2_TASK_STORAGE_DIR: ${DEEPSEEK_OCR2_TASK_STORAGE_DIR:-/data/tasks}
+    ports:
+      - "${DEEPSEEK_OCR2_PORT:-8000}:${DEEPSEEK_OCR2_PORT:-8000}"
+    volumes:
+      - ./data/tasks:/data/tasks
+      - ./data/hf_cache:/cache/huggingface
+    device_requests:
+      - driver: nvidia
+        count: all
+        capabilities: [gpu]
+    shm_size: "2g"
+    restart: unless-stopped
