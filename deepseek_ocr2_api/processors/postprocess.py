@@ -273,6 +273,9 @@ def clean_output(text: str, other_refs: List[str]) -> str:
     Returns:
         Cleaned text.
     """
+    # Remove EOS token if present
+    text = text.replace('<｜end▁of▁sentence｜>', '')
+
     # Remove other references
     for ref in other_refs:
         text = text.replace(ref, '')
