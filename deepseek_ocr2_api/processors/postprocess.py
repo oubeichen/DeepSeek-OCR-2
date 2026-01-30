@@ -76,6 +76,8 @@ def extract_refs_with_content(text: str) -> Tuple[List[RefMatch], List[str], Lis
             content_end = len(text)
 
         text_content = text[content_start:content_end].strip()
+        # Remove EOS token if present
+        text_content = text_content.replace('<｜end▁of▁sentence｜>', '').strip()
 
         ref_match = RefMatch(
             full_match=full_match,
@@ -273,6 +275,9 @@ def clean_output(text: str, other_refs: List[str]) -> str:
     Returns:
         Cleaned text.
     """
+    # Remove EOS token if present
+    text = text.replace('<｜end▁of▁sentence｜>', '')
+
     # Remove other references
     for ref in other_refs:
         text = text.replace(ref, '')
