@@ -43,6 +43,11 @@ class Settings(BaseSettings):
         default=True,
         description="Whether to trust remote code from HuggingFace"
     )
+    offline_mode: bool = Field(
+        default=True,
+        description="Run in offline mode without accessing HuggingFace Hub. "
+                    "Requires model files to be available locally."
+    )
 
     # =================
     # GPU Configuration
@@ -297,11 +302,15 @@ class Settings(BaseSettings):
 
     def get_vllm_env_vars(self) -> dict:
         """Get environment variables for vLLM."""
-        return {
+        env_vars = {
             "CUDA_VISIBLE_DEVICES": self.cuda_visible_devices,
             "VLLM_USE_V1": "0",
             "VLLM_ENGINE_ITERATION_TIMEOUT_S": str(self.engine_iteration_timeout),
         }
+        if self.offline_mode:
+            env_vars["HF_HUB_OFFLINE"] = "1"
+            env_vars["TRANSFORMERS_OFFLINE"] = "1"
+        return env_vars
 
     def apply_env_vars(self):
         """Apply environment variables before engine initialization."""
